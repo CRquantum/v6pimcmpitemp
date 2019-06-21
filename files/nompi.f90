@@ -318,6 +318,10 @@ contains
    return
    end subroutine mpiwait   
    
-   
- 
+   DOUBLE PRECISION function MPI_WTIME()
+   real(kind=r8) :: time
+   call CPU_TIME(time)
+   MPI_WTIME=time
+   return
+   end
 end module mympi

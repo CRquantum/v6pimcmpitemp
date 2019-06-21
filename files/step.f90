@@ -1032,7 +1032,7 @@ contains
     write (12,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
            day,hour,minute,second                                          
                    endif
-                   if ( (loadedextra).or.((i.eq.ipath).and.(loadedextra==.false.).and.(n5c/=0)) ) then                                                 
+                   if ( (loadedextra).or.((i.eq.ipath).and.(loadedextra.eqv..false.).and.(n5c/=0)) ) then                                                 
                        nmax2=n5c*(npo-m4)-1           
                        if (myrank().eq.0) then                 
                            do  k=0,nmax2

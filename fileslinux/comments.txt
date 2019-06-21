@@ -1,0 +1,2 @@
+the vnn order in the av18pot is different from schmidt order. 
+need to convert them into schmidt order.

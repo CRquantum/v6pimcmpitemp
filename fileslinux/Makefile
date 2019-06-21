@@ -1,0 +1,120 @@
+#$Id: Makefile.nucmatop,v 1.4 2013/12/11 19:36:53 nuclear Exp $
+MPI=false
+MPI=true
+
+ifeq ($(MPI),true)
+   FC=mpiifort 
+   MPIFILE=mympi
+   EXEC=v6pimcmpi
+#OMP= #-openmp -lpthread -openmp-report
+FFLAGS= -O3 -xHost # -fast # -O2
+F77FLAGS=$(FFLAGS)  -r8 # intel fortran
+LDFLAGS=-L/opt/intel/mkl/lib/intel64
+LIBS=-lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_intel_thread -lmkl_lapack95_lp64 -lmkl_core -liomp5 -lpthread #-check all -warn all
+MATRIX=matrixlapack
+else
+   FC=gfortran
+   MPIFILE=nompi
+   EXEC=v6pimc
+#OMP= #-openmp -lpthread -openmp-report
+FFLAGS= -O3 # -O2
+F77FLAGS=$(FFLAGS) -fdefault-real-8 -fdefault-double-8 # gfortran only.
+MATRIX=matrixlapack
+LDFLAGS=-L/usr/local/lib
+LIBS=-llapack -lrefblas -ltmglib
+endif
+
+
+
+.SUFFIXES:
+.SUFFIXES: .o .f .f90
+
+.f90.o:
+	$(FC) $(FFLAGS) -c $<
+
+OBJECTS=\
+he4v6pimc.o\
+av18pot.o\
+brut.o\
+cheft.o\
+chorizos.o\
+estimator.o\
+estimatorristra.o\
+lattice.o\
+lj.o\
+math.o\
+$(MPIFILE).o\
+$(MATRIX).o\
+pot.o\
+ran.o\
+step.o\
+v6pot.o\
+v6stepcalc.o\
+volume.o\
+wavefunction.o
+   
+he4v6pimc: $(OBJECTS)
+	$(FC) -o ./$(EXEC) $(OBJECTS) $(LIBS) 
+
+clean:
+	rm -f *\.mod *\.o *~
+
+he4v6pimc.o: ran.o brut.o $(MPIFILE).o step.o\
+	v6stepcalc.o estimator.o estimatorristra.o wavefunction.o math.o he4v6pimc.f90
+	$(FC) $(FFLAGS) -c he4v6pimc.f90
+
+av18pot.o: av18pot.f
+	$(FC) $(F77FLAGS) -c av18pot.f
+
+brut.o: $(MPIFILE).o ran.o math.o brut.f90
+	$(FC) $(FFLAGS) -c brut.f90
+
+cheft.o: cheft.f90
+	$(FC) $(FFLAGS) -c cheft.f90
+
+chorizos.o: $(MPIFILE).o chorizos.f90
+	$(FC) $(FFLAGS) -c chorizos.f90
+
+estimator.o: $(MPIFILE).o estimator.f90
+	$(FC) $(FFLAGS) -c estimator.f90
+	
+estimatorristra.o: $(MPIFILE).o estimatorristra.f90
+	$(FC) $(FFLAGS) -c estimatorristra.f90
+
+lattice.o: lattice.f90
+	$(FC) $(FFLAGS) -c lattice.f90
+	
+lj.o: volume.o lj.f90
+	$(FC) $(FFLAGS) -c lj.f90	
+	
+math.o: math.f90
+	$(FC) $(FFLAGS) -c math.f90		
+	
+$(MPIFILE).o: $(MPIFILE).f90
+	$(FC) $(FFLAGS) -c $(MPIFILE).f90
+
+$(MATRIX).o: $(MATRIX).f90
+	$(FC) $(FFLAGS) -c $(MATRIX).f90
+
+pot.o: pot.f
+	$(FC) $(F77FLAGS) -c pot.f
+
+ran.o: ran.f90
+	$(FC) $(FFLAGS) -c ran.f90
+
+step.o: chorizos.o math.o wavefunction.o v6stepcalc.o ran.o brut.o $(MATRIX).o $(MPIFILE).o\
+  estimator.o estimatorristra.o lj.o step.f90
+	$(FC) $(FFLAGS) -c step.f90
+
+v6pot.o: cheft.o $(MPIFILE).o v6pot.f90
+	$(FC) $(FFLAGS) -c v6pot.f90
+
+v6stepcalc.o: v6pot.o $(MPIFILE).o math.o brut.o $(MATRIX).o v6stepcalc.f90
+	$(FC) $(FFLAGS) -c v6stepcalc.f90
+
+volume.o: volume.f90
+	$(FC) $(FFLAGS) -c volume.f90
+
+wavefunction.o: $(MPIFILE).o math.o lj.o v6stepcalc.o brut.o wavefunction.f90
+	$(FC) $(FFLAGS) -c wavefunction.f90
+

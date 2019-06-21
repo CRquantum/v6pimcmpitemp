@@ -263,11 +263,11 @@
         call ran2(dummy,irn)
         if (myrank().eq.i) then
             irnsave=irn
-            call setrn(irn)    ! different cores have different seed.  
-            exit
+            call setrn(irn)    ! different cores have different seed. 
+            exit       
         endif 
     enddo
-   
+
     !allocate(irnall(0:nproc()-1))
     !call gather(irnsave,irnall)
     !if (myrank().eq.0) then

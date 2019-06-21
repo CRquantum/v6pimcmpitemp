@@ -1,4 +1,3 @@
-!$Id: estimator.f90,v 1.2 2003/02/24 14:36:54 nuclear Exp $
 module estimator
    implicit none
    integer, private, parameter :: i4=selected_int_kind(9)

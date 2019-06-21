@@ -1,4 +1,3 @@
-    !$Id: step.f90,v 1.4 2003/02/25 18:11:59 nuclear Exp $
 module step
     use chorizos
     implicit none
@@ -46,7 +45,6 @@ module step
     character(len=120), private, save, allocatable :: answer(:)
     integer(kind=i4), private, save :: ipath,npo,ixtempo    
 
-   
 contains
     subroutine stepinit(npartin,nchorizoin,hbarin,dtin &
         ,mmaxin,nrepmaxin,irepin,nstepdecorin &
@@ -1216,21 +1214,21 @@ contains
     answer=resstring()
       
     if (myrank().eq.0) then   
-    write (6,*) 'path #: ', iin 
-	write (12,*) 'path #: ', iin     
-    write (6,'(a120)') (answer(k),k=1,size(answer))
-	write (12,'(a120)') (answer(k),k=1,size(answer))  
+        write (6,*) 'path #: ', iin 
+	    write (12,*) 'path #: ', iin     
+        write (6,'(a120)') (answer(k),k=1,size(answer))
+	    write (12,'(a120)') (answer(k),k=1,size(answer))  
     endif    
      
     ! show rho distribution on the fly
 	allocate(rhodist(0:nrhobin),rhodisterr(0:nrhobin))
 	call updaterhodistrbt(rhodist,rhodisterr,nchorizomid) ! choose the middle bead
     if (myrank().eq.0) then
-	open(unit=32,FILE='rhodistribution.txt',FORM='FORMATTED')	 
-	do k=0,nrhobin
-	write (32,'(i10,1x,3(f10.5,1x))') k,(k+0.5)*rhobinsize,rhodist(k),rhodisterr(k)
-	enddo
-	close(32) 
+	    open(unit=32,FILE='rhodistribution.txt',FORM='FORMATTED')	 
+	    do k=0,nrhobin
+	    write (32,'(i10,1x,3(f10.5,1x))') k,(k+0.5)*rhobinsize,rhodist(k),rhodisterr(k)
+	    enddo
+	    close(32) 
     endif
     deallocate(rhodist,rhodisterr)
      

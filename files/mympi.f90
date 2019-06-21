@@ -1,4 +1,3 @@
-!$Id: mympi.f90,v 1.2 2011/04/19 15:45:39 schmidt Exp $
 module mympi
    implicit none
    include 'mpif.h'

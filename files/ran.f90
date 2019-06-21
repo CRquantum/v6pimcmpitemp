@@ -111,8 +111,8 @@ contains
    integer(kind=i8) :: irnin
    integer(kind=i8), dimension(1) :: iseed
    irn=iand(irnin,mask48)
-   iseed=irnin
-   call RANDOM_SEED(PUT=iseed) ! set the interal ran function's seed.
+   !iseed=irnin
+   !call RANDOM_SEED(PUT=iseed) ! set the internal ran function's seed.
    return
    end subroutine setrn
 
@@ -125,13 +125,13 @@ contains
    return
    end subroutine savern
    
-   function randomn(n) ! the default ramdom_number subroutine.
-! return an array of random variates (0,1)
-   integer(kind=i4) :: n
-   real(kind=r8), dimension(n) :: randomn
-   integer(kind=i4) :: i
-   call RANDOM_NUMBER(randomn)
-   return
-   end function randomn
+!   function randomn(n) ! the default ramdom_number subroutine.
+!! return an array of random variates (0,1)
+!   integer(kind=i4) :: n
+!   real(kind=r8), dimension(n) :: randomn
+!   integer(kind=i4) :: i
+!   call RANDOM_NUMBER(randomn)
+!   return
+!   end function randomn
 
 end module random

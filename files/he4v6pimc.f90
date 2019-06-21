@@ -458,8 +458,7 @@
  
     call computeinit(answer,rhobinsize)
     call compute
-    
-    
+       
     call barrier
     if (myrank().eq.0) then
     time2=mpi_wtime() ! for mpi code, mpi_wtime() is better than cpu_time.
@@ -471,14 +470,7 @@
            day,hour,minute,second
     close (12)     
     endif
-    
-       
-       
-       
-       
-       
-   
-   
+ 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  
    
        

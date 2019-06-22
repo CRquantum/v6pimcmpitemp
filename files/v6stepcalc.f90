@@ -277,7 +277,7 @@ contains
   130 continue
    80 continue
    70 continue 	  
-! test here:	  	    
+! test here:	
 	return	    
 	end subroutine spinit  
 

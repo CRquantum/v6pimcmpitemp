@@ -38,15 +38,15 @@ contains
 !
 ! zero all estimators
 !
-   valtot=0.0_r8
-   val2tot=0.0_r8
-   valblk=0.0_r8
-   val2=0.0_r8
-   valnow=0.0_r8
-   avbad=0.0_r8
-   av2bad=0.0_r8
-   wtblk=0.0_r8
-   wttot=0.0_r8
+   valtot=0
+   val2tot=0
+   valblk=0
+   val2=0
+   valnow=0
+   avbad=0
+   av2bad=0
+   wtblk=0
+   wttot=0
    nblock=0
    return
    end subroutine zerest
@@ -99,8 +99,8 @@ contains
       val2=val2sum
       
       do i=1,nest
-         if (valblk(i).eq.0.0_r8) then
-            valnow(i)=0.0_r8
+         if (valblk(i).eq.0) then
+            valnow(i)=0
          else		   
    	      if (((irep.eq.2).or.(irep.eq.4).or.(irep.eq.5).or.(irep.eq.6)).and.(i.eq.6)) then
              valnow(i)=sqrt(valblk(i)/wtblk(i)) ! calculate rm=sqrt(ave rm^2) 
@@ -117,9 +117,9 @@ contains
       enddo
    endif
    
-   valblk=0.0_r8
-   wtblk=0.0_r8
-   val2=0.0_r8
+   valblk=0
+   wtblk=0
+   val2=0
    
    nblock=nblock+1
    return
@@ -136,8 +136,8 @@ contains
    
     
    vnow=valnow(i)
-   if (valtot(i).eq.0.0_r8) then
-      val=0.0_r8
+   if (valtot(i).eq.0) then
+      val=0
    else
       val=valtot(i)/wttot(i)
    endif

@@ -280,7 +280,7 @@ contains
    subroutine scatteri1d(i,iscatter)
    integer(kind=i4) :: i(:),iscatter(:)
    integer :: ierror,sizenow
-   sizenow=size(i)/iproc
+   sizenow=size(iscatter)
    call mpi_scatter(i,sizenow,mpii4,iscatter,sizenow,mpii4,0, &
       mpi_comm_world,ierror) 
    return
@@ -297,7 +297,7 @@ contains
    subroutine scatterr1d(r,rscatter)
    real(kind=r8) :: r(:),rscatter(:)
    integer :: ierror,sizenow
-   sizenow=size(r)/iproc
+   sizenow=size(rscatter)
    call mpi_scatter(r,sizenow,mpir8,rscatter,sizenow,mpir8,0, &
       mpi_comm_world,ierror)
    return

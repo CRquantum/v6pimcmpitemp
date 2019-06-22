@@ -4,13 +4,10 @@ module step
     integer, private, parameter :: i4=selected_int_kind(9)
     integer, private, parameter :: i8=selected_int_kind(15)
     integer, private, parameter :: r8=selected_real_kind(15,9)
-
     type (chorizo), private, allocatable, save :: ristra(:),ristraold(:),ristranew(:),ristranew1(:)
     type (chorizo), private, allocatable, save :: newristra(:),oldristra(:)
-
     integer(kind=i4), private, save :: npart,nprot,nspin,nisospin,nbasis
     integer(kind=i4), private, save :: nav,nstep
-
     integer(kind=i4), private, save :: nchorizo,nchorizomid,nchorizomod,nrepmax,irep,nstepdecor,nrhobin
     integer(kind=i4), private, save :: mmax,nbisect,nbisecthalf,mmaxhalf,nreparrow,icrephistlast,icrephist
     real(kind=r8), private, save ::  hbar,dt,sigma,driftm,el,repprob
@@ -59,7 +56,7 @@ contains
     integer(kind=i4) :: i,nristra
     logical :: icorrchkin
     !repprob=repprobin
-    npart=npartin
+    npart=npartin    
     x0step=x0stepin
     !nrepmax=nrepmaxin
     mmax=mmaxin
@@ -87,6 +84,7 @@ contains
     mmaxhalf=mmax-1
     nristra=nbisect ! max(nrepmax,nbisect)
     allocate(ristra(0:nchorizo),ristraold(0:nchorizo),ristranew(0:nchorizo),ristranew1(0:nchorizo))
+   
     do i=0,nchorizo
         allocate(ristra(i)%x(3,npart),ristra(i)%dpsi(3,npart))
 	    allocate(ristraold(i)%x(3,npart),ristraold(i)%dpsi(3,npart))
@@ -228,34 +226,64 @@ contains
         call gather(jplo,jplall)
         call gather(ipro,iprall)
         call gather(jpro,jprall)     
-      
-      
-    else    
+       
+    else 
+           
     if (myrank()==0) then      
         write (6,'(''input from file'',t40,a20)') infile
         open(unit=9,form='formatted',file=trim(infile),position='rewind')
         read(9,'(i10)') nptot
-        if (nproc()/=nptot) then
-            write (6,'(''# of process does not match the infile record'')')          
-            call abort
+        if (nproc()/=nptot) then  
+            if (nproc()<nptot) then
+                write (6,'(''# of cores now < # of cores in infile.'')')   
+                write (12,'(''# of cores now < # of cores in infile.'')')   
+                do l=0,nproc()-1
+                    read (9,'(6i10)') iplall((6*l+1):(6*(l+1))) 
+                    read (9,'(6i10)') jplall((6*l+1):(6*(l+1))) 
+                    read (9,'(6i10)') iprall((6*l+1):(6*(l+1))) 
+                    read (9,'(6i10)') jprall((6*l+1):(6*(l+1))) 
+                    read (9,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))    
+                enddo                    
+            else
+                write (6,'(''# of cores now > # of cores in infile.'')') 
+                write (12,'(''# of cores now > # of cores in infile.'')') 
+                do l=0,nptot-1
+                    read (9,'(6i10)') iplall((6*l+1):(6*(l+1))) 
+                    read (9,'(6i10)') jplall((6*l+1):(6*(l+1))) 
+                    read (9,'(6i10)') iprall((6*l+1):(6*(l+1))) 
+                    read (9,'(6i10)') jprall((6*l+1):(6*(l+1))) 
+                    read (9,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))    
+                enddo                 
+                ! add more replica
+                do l=nptot,nproc()-1
+                   k=mod(l-nptot,nptot)                                    
+                    iplall((6*l+1):(6*(l+1)))=iplall((6*k+1):(6*(k+1))) 
+                    jplall((6*l+1):(6*(l+1)))=jplall((6*k+1):(6*(k+1)))  
+                    iprall((6*l+1):(6*(l+1)))=iprall((6*k+1):(6*(k+1)))  
+                    jprall((6*l+1):(6*(l+1)))=jprall((6*k+1):(6*(k+1)))  
+                    xall((ixtemp*l+1):(ixtemp*(l+1)))=xall((ixtemp*k+1):(ixtemp*(k+1)))                        
+                enddo 
+            endif       
+        else    
+            do l=0,nproc()-1
+                read (9,'(6i10)') iplall((6*l+1):(6*(l+1))) 
+                read (9,'(6i10)') jplall((6*l+1):(6*(l+1))) 
+                read (9,'(6i10)') iprall((6*l+1):(6*(l+1))) 
+                read (9,'(6i10)') jprall((6*l+1):(6*(l+1))) 
+                read (9,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))    
+            enddo               
         endif
-        do l=0,nproc()-1
-        read (9,'(6i10)') iplall((6*l+1):(6*(l+1))) 
-        read (9,'(6i10)') jplall((6*l+1):(6*(l+1))) 
-        read (9,'(6i10)') iprall((6*l+1):(6*(l+1))) 
-        read (9,'(6i10)') jprall((6*l+1):(6*(l+1))) 
-        read (9,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))    
-        enddo  
         close(9)
     endif   
     
     ! I think, when all the process see this scatter command, they will wait here, until process 0 reach here and give this scatter order. Just like bcast.    
+        
         call scatter(iplall,iplo)   
         call scatter(jplall,jplo)
         call scatter(iprall,ipro)
         call scatter(jprall,jpro)
         call scatter(xall,x0tot1d)
-    
+        
         call barrier ! just wait until receive scatter info from process 0.
         x0tot=reshape(x0tot1d,shape(x0tot))
         call chorizoallin(x0tot)
@@ -266,29 +294,14 @@ contains
     if (myrank()==0) write (6,'(''output to file'',t40,a20)') outfile    
     xr=ristra(nchorizo)%x
     xl=ristra(0)%x 
-    ! need to input cwtbegin and cwtend!
-    ! left to right
-    !write(6,*) 'iplall=',  iplall
- 
-    ! this is a small program to output results from each process, with an order which is from 0 to nproc.   
-    !do i=0,nproc()-1   
-    ! if (myrank() == i) then   
-    !     write(6,'(''rank='', i10,t40,(6i10))') myrank(), iplo
-    ! endif
-    ! call barrier  
-    !enddo
-    !   
+
     call corop(xl,iplo,jplo,cwtbegin) ! psitcwt    
     call v6propr(xl,-1,cwtbegin,cwtl2r(0,:,:))
     do i=1,nchorizo-1
 	    x=ristra(i)%x
-        !cwtl2r(i-1,:,:)=cwtl2r(i-1,:,:)/2.
 	    call v6proplr(x,x,-1,cwtl2r(i-1,:,:),cwtl2r(i,:,:))
     enddo 
 
-    !cwtl2r(nchorizo-1,:,:)=cwtl2r(nchorizo-1,:,:)*2.**(nchorizo-1)
-   
-   
     call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
     ! right to left  
 
@@ -300,23 +313,7 @@ contains
     enddo
     call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))
     
-    ! check
-      
-    !open(unit=19,form='formatted',file='check1cwt.txt')
-    !    write(19,'( ''cwtbegin ='', 12(g15.7,1x) )') cwtbegin
-    !    write(19,*) 
-    !    write(19,'( ''cwtend ='', 12(g15.7,1x) )') cwtend
-    !close(19)  
-   
     call hpsi(ristra(0),ristra(nchorizo),vn,vd,vnke,vnpev6,vnpeem,psi20,psi2n,rf,icheck)  
-   
-    !write(6,'( ''hpsicheck stepchorizoinit hpsi'', 8(g15.7,1x) )') vn,vd,vnke,vnpev6,vnpeem,psi20,psi2n,rf   
-    !x=ristra(0)%x
-    !call cgv6(x)
-    !call  done
-    !call checkv6mat(x,psi2,psi2a)
-    !write(6,'( ''hpsicheck stepchorizoinit matrix check'', 8(g15.7,1x) )') psi2,psi2a
-    !call done  
    
     if (myrank()==0) allocate(icheck1d(0:nproc()-1))   
     call gather(icheck,icheck1d)
@@ -344,41 +341,6 @@ contains
      deallocate(xall,iplall,jplall,iprall,jprall)     
     endif
     
-   
-  
-    !write(6,*) 'iplo=',iplo
-    !write(6,*) 'jplo=',jplo   
-    !write(6,*) 'ipro=',ipro
-    !write(6,*) 'jpro=',jpro     
- 
-    ! check if l2r and r2l can be inversed by +dt.     
-    ! l2r
-    !xr=ristra(nchorizo)%x
-    !call v6proprpr(xr,-1,cwtl2r(nchorizo,:,:),cwt(:,:))
-    !write(6,*) '--------  check l2r   -------'
-    !write(6,*) 'n=', nchorizo-1
-    !write(6,*) 'l2r difference = ', sum(abs(cwt(:,:)-cwtl2r(nchorizo-1,:,:)))
-    !write(6,*) 'cwt='
-    !write(6,'(6( "(" F15.7,SP,F15.7,"i" ")" ) )') cwt
-    !write(6,*) 'cwt-cwtl2r='
-    !write(6,'(6( "("   F15.7,SP,F15.7,"i"  ")"  ) )')  cwt(:,:)-cwtl2r(nchorizo-1,:,:)
-    !do i=nchorizo-2,0,-1
-    !   x=ristra(i+1)%x
-    !   call v6proplpr(x,-1,cwt,cwt1)
-    !   call v6proprpr(x,-1,cwt1,cwt)     
-    !   write(6,*) 'n=', i
-    !write(6,*) 'cwt-cwtl2r='
-    !write(6,'(6( "("   F15.7,SP,F15.7,"i"  ")"  ) )')  cwt(:,:)-cwtl2r(i,:,:) 
-    !write(6,*) 'cwt='
-    !write(6,'(6( "("   F15.7,SP,F15.7,"i"  ")"  ) )')  cwt
-    !write(6,*) 'cwtl2r='
-    !write(6,'(6( "("   F15.7,SP,F15.7,"i"  ")"  ) )')  cwtl2r(i,:,:)       
-    !enddo
-    !
-    !
-    !
-    !stop
-   
     return
     end subroutine stepchorizoinit 
    
@@ -394,9 +356,6 @@ contains
     real(kind=r8) ::  rangex,newp,oldp,rn(1)
     character(len=70) :: infilein,outfilein  
     logical :: isitein
-    ! calculate the cwt for chorizos for a given picked l and r order.
-   
-    !write(6,*) 'stepchorizoinitlr start!'
    
     iclrtot=iclrtot+1
    
@@ -547,28 +506,30 @@ contains
 	    !endif 
 
     ! check correlation steps
-    if (icorrchk) then
-    if (icstepstd.le.nstepdecor) then   ! here nstepdecor usually set the same as nstep. 
-   	    xtmp=ristra(nchorizomid)%x
-	    !xin(icstepstd)=xtmp(1,1)
-	    call funcrmsq(xtmp,rm,rmsq)
-	    xin(icstepstd)=rm	   
-        !call hpsi(ristra(nchorizomid))
-	    !xin(icstepstd)=ristra(nchorizomid)%elocal     
-        !call hpsi(ristra(0))
-	    !xin(icstepstd)=ristra(0)%elocal 
-	    if (icstepstd.eq.nstepdecor) then
-	    ixd=icstepstd
-	    lmax=nstepdecor
-	    call corrchk(xin,ixd,corr,lmax)   
-	    OPEN(30,FILE='xin.txt',FORM='FORMATTED')
-        WRITE(30,'(2x,2(G15.8,2x))') 'k','x' 
-        do j=1,nstepdecor  
-	    WRITE(30,'(2x,2(G15.8,2x))') j,xin(j)	
-        enddo
-	    close(30)
-        endif   
-    endif
+    if (icorrchk) then    
+        if (myrank().eq.0) then   
+            if (icstepstd.le.nstepdecor) then   ! here nstepdecor usually set the same as nstep. 
+   	            xtmp=ristra(nchorizomid)%x
+	            !xin(icstepstd)=xtmp(1,1)
+	            call funcrmsq(xtmp,rm,rmsq)
+	            xin(icstepstd)=rm	   
+                !call hpsi(ristra(nchorizomid))
+	            !xin(icstepstd)=ristra(nchorizomid)%elocal     
+                !call hpsi(ristra(0))
+	            !xin(icstepstd)=ristra(0)%elocal 
+	            if (icstepstd.eq.nstepdecor) then
+	            ixd=icstepstd
+	            lmax=nstepdecor
+	            call corrchk(xin,ixd,corr,lmax)   
+	            OPEN(30,FILE='xin.txt',FORM='FORMATTED')
+                WRITE(30,'(2x,2(G15.8,2x))') 'k','x' 
+                do j=1,nstepdecor  
+	            WRITE(30,'(2x,2(G15.8,2x))') j,xin(j)	
+                enddo
+	            close(30)
+                endif   
+            endif
+        endif
     endif
      
     ! calculations	  
@@ -702,620 +663,7 @@ contains
    
     return
     end subroutine stepstd 
-    
-    subroutine compute ! call stepinit first so that get irep first.
-    use estimator
-    use estimatorristra
-    use wavefunction
-    use random
-    use brut
-    use mympi
-    use math
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb &
-                    ,time0,time1,time2,timeall,second
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,i1,j,k,k0,l,m,n,ipick,ixd,lmax,icheck,ixtemp,nmax,nmax1,nmax2
-    integer(kind=i4) :: np,n1,m1,n2,m2,n3,m3,n4,n4c,m4,m4c,n5,n51,n5c,m5,n6,n61,n6c,m6,lnow &
-                      ,idummy1,idummy2,npatheach0,npatheach,rankl,rankr &
-                      ,day,hour,minute
-    integer(kind=i4) :: ipathtot,ipathnow,ipathrest,ipc1,ipc2,ipc3 ! check i4 or i8
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n
-    complex(kind=r8) :: f
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:,:),jplall(:,:),iprall(:,:),jprall(:,:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:,:) ! for mpi_gather
-    integer(kind=i4), allocatable :: iplallo(:),jplallo(:),iprallo(:),jprallo(:)	
-    real(kind=r8), allocatable :: xallo(:) 
-    integer(kind=i4), allocatable :: iplalln(:),jplalln(:),ipralln(:),jpralln(:)	
-    real(kind=r8), allocatable :: xalln(:)  
-    real(kind=r8), allocatable :: xtotnow(:)
-    integer(kind=i4), allocatable :: iplnow(:),jplnow(:),iprnow(:),jprnow(:)	
-    logical :: supermode ! true = turn on the big ram read in mode.
-    logical :: loaded,finished,loadmore,loadextra,loadedextra
-    
-    ixtemp=3*npart*(nchorizo+1)    
-    if (ixtemp /= ixtempo) then
-       if (myrank().eq.0) then     
-           write (6,*) 'ixtemp and ixtemp old does not match! check!'
-           call abort
-       endif  
-    endif
-            
-    ipathtot=ipath*npo
-    np=nproc()        
-    n1=npo/np
-    m1=mod(npo,np)
-        
-    n2=ipathtot/np
-    m2=mod(ipathtot,np)
-        
-    npatheach0=10 ! it can change to a proper value according to the speed.
-    npatheach=min(npatheach0,n2) ! # of paths per core for each step of calculation.
-    n3=npatheach/npatheach0
-        
-    n4=np/npo 
-    m4=mod(np,npo)
 
-    loaded=.false.
-    loadmore=.false.
-    loadextra=.false.
-    loadedextra=.false.        
-       
-    select case (irep)
-           
-    case (5)  ! the usual way, read in a path then calcualte. 
-        
-        if (myrank().eq.0) then   
-            allocate(xallo(ixtemp*npo))
-            allocate(iplallo(6*npo),jplallo(6*npo),iprallo(6*npo),jprallo(6*npo))   
-            allocate(xalln(ixtemp*np))
-            allocate(iplalln(6*np),jplalln(6*np),ipralln(6*np),jpralln(6*np))   
-            open(unit=19,form='unformatted',file='path.unf',position='rewind')   
-        endif                             
-        if (n4 == 0) then ! npo # > np         
-           if (m1>0) n6=np/m1  ! np<npo             
-           if (myrank().eq.0) then   
-                if (n6>1) then       
-                    allocate(xall( (ixtemp*n1*np+1):ixtemp*npo,n6))
-                    allocate(iplall((6*n1*np+1):6*npo,n6),jplall((6*n1*np+1):6*npo,n6) &
-                            ,iprall((6*n1*np+1):6*npo,n6),jprall((6*n1*np+1):6*npo,n6))                         
-                endif
-           endif                   
-            n6c=0          
-            do i=1,ipath  
-                if (myrank()==0) then  ! read in the old path file.  
-                    if (i==1) time0=mpi_wtime()
-                    read (19) ipathnow
-                 do l=0,npo-1    
-                    read (19) lnow
-                    read (19) iplallo((6*l+1):(6*(l+1))) 
-                    read (19) jplallo((6*l+1):(6*(l+1))) 
-                    read (19) iprallo((6*l+1):(6*(l+1))) 
-                    read (19) jprallo((6*l+1):(6*(l+1))) 
-                    read (19) xallo((ixtemp*l+1):(ixtemp*(l+1)))               
-                 enddo                          
-                endif  
-                do j=1,n1   
-                    if (myrank().eq.0) then
-                        do k=0,np-1                
-                            l=np*(j-1)+k ! convert the current core # from new to old. 
-                            if (k /= 0) then
-                                call send(iplallo((6*l+1):(6*(l+1))),k,1) 
-                                call send(jplallo((6*l+1):(6*(l+1))),k,2)
-                                call send(iprallo((6*l+1):(6*(l+1))),k,3) 
-                                call send(jprallo((6*l+1):(6*(l+1))),k,4) 
-                                call send(xallo((ixtemp*l+1):(ixtemp*(l+1))),k,5)      
-                            else ! send to process 0.
-                                iplo=iplallo((6*l+1):(6*(l+1)))
-                                jplo=jplallo((6*l+1):(6*(l+1)))
-                                ipro=iprallo((6*l+1):(6*(l+1)))
-                                jpro=jprallo((6*l+1):(6*(l+1)))
-                                x0tot1d=xallo((ixtemp*l+1):(ixtemp*(l+1)))
-                            endif          
-                        enddo
-                    else                                        
-                        call recv(iplo,0,1)
-                        call recv(jplo,0,2)
-                        call recv(ipro,0,3)
-                        call recv(jpro,0,4)
-                        call recv(x0tot1d,0,5)                  
-                    endif            
-                    ! calculate                          
-                    x0tot=reshape(x0tot1d,shape(x0tot)) 
-                    call computecore(x0tot,iplo,jplo,ipro,jpro,0,np-1)    
-                    ! update                       
-                    call barrier
-                    call computeupdate(i) ! require all the cores.   
-                    if ((j.eq.n1).and.(myrank().eq.0).and.(i==1)) then
-                        time1=mpi_wtime()
-                        timeall=(time1-time0)*dble(ipathtot)/dble(n1*np)
-                        call timedhms(timeall,day,hour,minute,second)                        
-    write (6,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
-           day,hour,minute,second
-    write (12,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
-           day,hour,minute,second         
-                    endif  
-                enddo   
-                if (m1 > 0) then  !        deal with the rest and calculate                              
-                 if (n6 <= 1) then                   
-                    if ( myrank()<=m1-1 ) then  
-                        if (myrank().eq.0) then            
-                            do k=0,m1-1             
-                                l=np*n1+k
-                                if (k /= 0) then
-                                    call send(iplallo((6*l+1):(6*(l+1))),k,1) 
-                                    call send(jplallo((6*l+1):(6*(l+1))),k,2)
-                                    call send(iprallo((6*l+1):(6*(l+1))),k,3) 
-                                    call send(jprallo((6*l+1):(6*(l+1))),k,4) 
-                                    call send(xallo((ixtemp*l+1):(ixtemp*(l+1))),k,5) 
-                                else
-                                    iplo=iplallo((6*l+1):(6*(l+1)))
-                                    jplo=jplallo((6*l+1):(6*(l+1)))
-                                    ipro=iprallo((6*l+1):(6*(l+1)))
-                                    jpro=jprallo((6*l+1):(6*(l+1)))
-                                    x0tot1d=xallo((ixtemp*l+1):(ixtemp*(l+1)))
-                                endif        
-                            enddo                                                         
-                        else                    
-                            call recv(iplo,0,1)
-                            call recv(jplo,0,2)
-                            call recv(ipro,0,3)
-                            call recv(jpro,0,4)
-                            call recv(x0tot1d,0,5)                    
-                        endif                   
-                    endif  
-                    if ( myrank()<=m1-1 ) then                  
-                        x0tot=reshape(x0tot1d,shape(x0tot))             
-                        call computecore(x0tot,iplo,jplo,ipro,jpro,0,m1-1) 
-                    endif
-                    call barrier 
-                    call computeupdate(i)                     
-                 else ! n6 >1             
-                     n6c=n6c+1                    
-                     if (myrank().eq.0) then                         
-                        do l=n1*np,npo-1 
-                            iplall((6*l+1):(6*(l+1)),n6c)=iplallo((6*l+1):(6*(l+1)))
-                            jplall((6*l+1):(6*(l+1)),n6c)=jplallo((6*l+1):(6*(l+1)))
-                            iprall((6*l+1):(6*(l+1)),n6c)=iprallo((6*l+1):(6*(l+1)))
-                            jprall((6*l+1):(6*(l+1)),n6c)=jprallo((6*l+1):(6*(l+1)))
-                            xall((ixtemp*l+1):(ixtemp*(l+1)),n6c)=xallo((ixtemp*l+1):(ixtemp*(l+1)))                        
-                        enddo                  
-                     endif                   
-                     if ( (n6c.eq.n6).or.((i.eq.ipath).and.(n6c<n6).and.(n6c>0)) ) then                        
-                         if (myrank()<=m1*n6c-1) then                            
-                             if (myrank().eq.0) then                                
-                                 do k=0,m1*n6c-1                   
-                                   n61=k/m1+1    
-                                   l=n1*np+mod(k,m1)
-                                   if (k/=0) then
-                                       call send( iplall((6*l+1):(6*(l+1)),n61),k,1   )
-                                       call send( jplall((6*l+1):(6*(l+1)),n61),k,2   )
-                                       call send( iprall((6*l+1):(6*(l+1)),n61),k,3   )
-                                       call send( jprall((6*l+1):(6*(l+1)),n61),k,4   )
-                                       call send( xall((ixtemp*l+1):(ixtemp*(l+1)),n61),k,5 )
-                                   else
-                                       iplo=iplall((6*l+1):(6*(l+1)),n61)
-                                       jplo=jplall((6*l+1):(6*(l+1)),n61)
-                                       ipro=iprall((6*l+1):(6*(l+1)),n61)
-                                       jpro=jprall((6*l+1):(6*(l+1)),n61)
-                                       x0tot1d=xall((ixtemp*l+1):(ixtemp*(l+1)),n61)
-                                   endif                                     
-                                 enddo
-                             else                
-                                call recv(iplo,0,1)
-                                call recv(jplo,0,2)
-                                call recv(ipro,0,3)
-                                call recv(jpro,0,4)
-                                call recv(x0tot1d,0,5)                
-                             endif                   
-                          x0tot=reshape(x0tot1d,shape(x0tot))             
-                          call computecore(x0tot,iplo,jplo,ipro,jpro,0,m1*n6c-1)                        
-                         endif   
-                       call barrier
-                       call computeupdate(i) ! require all the cores.                                            
-                         n6c=0                                      
-                     endif                 
-                 endif                                
-                endif                
-            enddo                      
-        else ! np >= npo                 
-            n5=np/(npo-m4)       ! save the rest ones.     
-            if (myrank().eq.0) then     
-                allocate(xall((ixtemp*m4+1):ixtemp*npo,n5))
-                allocate(iplall((6*m4+1):6*npo,n5),jplall((6*m4+1):6*npo,n5) &
-                        ,iprall((6*m4+1):6*npo,n5),jprall((6*m4+1):6*npo,n5))         
-            endif        
-            n4c=0 ! count n4
-            n5c=0   
-            do i=1,ipath
-                if (myrank()==0) then
-                    time0=mpi_wtime()
-                    read (19) ipathnow
-                    do l=0,npo-1    
-                        read (19) lnow
-                        read (19) iplallo((6*l+1):(6*(l+1))) 
-                        read (19) jplallo((6*l+1):(6*(l+1))) 
-                        read (19) iprallo((6*l+1):(6*(l+1))) 
-                        read (19) jprallo((6*l+1):(6*(l+1))) 
-                        read (19) xallo((ixtemp*l+1):(ixtemp*(l+1)))               
-                    enddo  
-                endif                                     
-                n4c=n4c+1 ! n4                   
-                if (npo*n4c>np) then
-                   loadextra =.true. 
-                else     
-                   loadextra =.false. 
-                endif  
-                if (loadextra) then
-                    nmax1=m4-1
-                else
-                    nmax1=npo-1
-                endif
-                k0=npo*(n4c-1) 
-                nmax=k0+nmax1            
-                if ( myrank().eq.0 ) then        
-                    do l=0,nmax1
-                        k=k0+l
-                        if (k/=0) then
-                            call send(iplallo((6*l+1):(6*(l+1))),k,1) 
-                            call send(jplallo((6*l+1):(6*(l+1))),k,2)
-                            call send(iprallo((6*l+1):(6*(l+1))),k,3) 
-                            call send(jprallo((6*l+1):(6*(l+1))),k,4) 
-                            call send(xallo((ixtemp*l+1):(ixtemp*(l+1))),k,5)
-                        else ! send to rank0 itself.
-                            iplo=iplallo((6*l+1):(6*(l+1)))
-                            jplo=jplallo((6*l+1):(6*(l+1)))
-                            ipro=iprallo((6*l+1):(6*(l+1)))
-                            jpro=jprallo((6*l+1):(6*(l+1)))
-                            x0tot1d=xallo((ixtemp*l+1):(ixtemp*(l+1)))                        
-                        endif 
-                    enddo                                   
-                    if ( loadextra ) then
-                        n5c=n5c+1
-                        do l=m4,npo-1
-                            iplall((6*l+1):(6*(l+1)),n5c)=iplallo((6*l+1):(6*(l+1)))
-                            jplall((6*l+1):(6*(l+1)),n5c)=jplallo((6*l+1):(6*(l+1)))
-                            iprall((6*l+1):(6*(l+1)),n5c)=iprallo((6*l+1):(6*(l+1)))
-                            jprall((6*l+1):(6*(l+1)),n5c)=jprallo((6*l+1):(6*(l+1)))
-                            xall((ixtemp*l+1):(ixtemp*(l+1)),n5c)=xallo((ixtemp*l+1):(ixtemp*(l+1)))
-                        enddo
-                    endif     
-                endif                             
-                if ( (myrank() /= 0).and.(myrank() >= k0).and.( myrank() <= nmax ) ) then
-                    call recv(iplo,0,1)
-                    call recv(jplo,0,2)
-                    call recv(ipro,0,3)
-                    call recv(jpro,0,4)
-                    call recv(x0tot1d,0,5)            
-                endif                                      
-               if (loadextra) loaded=.true.  
-               call bcast(n5c)
-               if (n5c.eq.n5) loadedextra=.true.                                 
-                if (m4==0) then              
-                   if (  (n4c==n4).or.(i==ipath)   ) then              
-                    loaded=.true.
-                   else                  
-                    loaded=.false.                 
-                   endif              
-                else  ! load extra may needed. loadmore              
-                   if (i<ipath) then 
-                       if (.not.loadextra  ) then
-                            loaded=.false.                              
-                       else
-                            loaded=.true.
-                       endif                        
-                   else                    
-                       loaded=.true.                    
-                   endif
-                endif                                          
-               if (loaded) then
-                  if (myrank()<=nmax) then
-                      x0tot=reshape(x0tot1d,shape(x0tot))             
-                      call computecore(x0tot,iplo,jplo,ipro,jpro,0,nmax)       
-                  endif
-                  call barrier
-                  call computeupdate(i) ! require all the cores.                                                 
-                   ! reset
-                   n4c=0
-                   loaded=.false.                     
-                   if (((i.eq.n4).or.(i.eq.n4+1)).and.myrank().eq.0) then
-                        time1=mpi_wtime()
-                        timeall=(time1-time0)*dble(ipathtot)/dble(np)
-                        call timedhms(timeall,day,hour,minute,second)                        
-    write (6,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
-           day,hour,minute,second
-    write (12,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
-           day,hour,minute,second                                          
-                   endif
-                   if ( (loadedextra).or.((i.eq.ipath).and.(loadedextra.eqv..false.).and.(n5c/=0)) ) then                                                 
-                       nmax2=n5c*(npo-m4)-1           
-                       if (myrank().eq.0) then                 
-                           do  k=0,nmax2
-                               n51=k/(npo-m4)+1
-                               l=m4+mod(k,npo-m4)  !m4+k-(n51-1)*(npo-m4)   ! check!!!!!!!!!!!!!!!!!!                                   
-                               if (k/=0) then
-                                   call send( iplall((6*l+1):(6*(l+1)),n51),k,1   )
-                                   call send( jplall((6*l+1):(6*(l+1)),n51),k,2   )
-                                   call send( iprall((6*l+1):(6*(l+1)),n51),k,3   )
-                                   call send( jprall((6*l+1):(6*(l+1)),n51),k,4   )
-                                   call send( xall((ixtemp*l+1):(ixtemp*(l+1)),n51),k,5 )
-                               else
-                                   iplo=iplall((6*l+1):(6*(l+1)),n51)
-                                   jplo=jplall((6*l+1):(6*(l+1)),n51)
-                                   ipro=iprall((6*l+1):(6*(l+1)),n51)
-                                   jpro=jprall((6*l+1):(6*(l+1)),n51)
-                                   x0tot1d=xall((ixtemp*l+1):(ixtemp*(l+1)),n51)
-                               endif                                          
-                           enddo
-                       else if ( myrank() <= nmax2 ) then
-                            call recv(iplo,0,1)
-                            call recv(jplo,0,2)
-                            call recv(ipro,0,3)
-                            call recv(jpro,0,4)
-                            call recv(x0tot1d,0,5)                    
-                       endif
-                       if (myrank() <= nmax2) then
-                          x0tot=reshape(x0tot1d,shape(x0tot))             
-                          call computecore(x0tot,iplo,jplo,ipro,jpro,0,nmax2)    
-                       endif   
-                       call barrier
-                       call computeupdate(i) ! require all the cores.
-                           ! reset
-                           n5c=0
-                           loadedextra=.false.      
-                   endif                                                 
-               endif                     
-            call barrier
-            enddo
-        endif       
-        call barrier
-        if (myrank().eq.0) close (19)        
-            
-    case (6)
-        
-        ! aother mode, change the way the pimc output the path.unf,
-        ! not decided and checked yet.
-        ! or may besupermode, do not need to consider ram resource problem, big ram is ready. bug need to fix
-               
-          if (myrank().eq.0) then
-              
-              write(6,*) 'irep=6 case has not been decided yet, abort!'
-              call abort
-          endif
-                 
-    case default
-        write (6,'(''Illegal irep value in compute, irep= '')') irep
-        call abort      
-        
-    end select
-
-    return
-    end subroutine compute
-    
-    subroutine computecore(x0totin,iploin,jploin,iproin,jproin,rankl,rankr) 
-! read in path, calculate all the results. and write to a file
-! rank1 must be zero   
-    use estimator
-    use estimatorristra
-    use wavefunction
-    use random
-    use brut
-    use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,rankl,rankr
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n
-    complex(kind=r8) :: f
-    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
- 
-! init   
-    call chorizoallin(x0totin)
-    call inputordlr(iploin,jploin,iproin,jproin)   
-    call updatecwtchain
-    
-! calculate    
-    call hpsi(ristra(0),ristra(nchorizo),vn,vd,vnke,vnpev6,vnpeem,psi20,psi2n,rf,icheck)
-    vnum=vn
-    vdenom=vd
-    ! update the v beads   
-    do i=0,nchorizo
-        call vtot(i,v(i))
-    enddo
-    v=v/rf
-    call addvalristra(1,v) ! do not need this part   
-   
-    call addval(3,vnum,1.0_r8)
-    call addval(4,vdenom,1.0_r8)
-	call addval(5,rf,1.0_r8)    
-
-	call funcrmsq(ristra(nchorizomid)%x,rm,rmsq)
-	call addval(6,rmsq,1.0_r8)
-	call addval(7,rm,1.0_r8)
-    
-	call samplerhodistrbt(ristra(nchorizomid)%x,nchorizomid,rhodistout)	  
-	call addval(8,rhodistout(0),1.0_r8)
-  
-    ! write out all the num and denom of all the cores
-
-    if (myrank().eq.0) open (unit=11,FILE='values.txt',FORM='FORMATTED',position='append')    
-    do i=rankl,rankr ! rank1 must be zero     
-        if ( myrank().eq.i  ) then         
-            if (myrank() /= 0) then         
-                call send(vnum,0,1)
-                call send(vdenom,0,2)
-                call send(vnke,0,3)
-                call send(vnpev6,0,4)
-                call send(vnpeem,0,5)
-                call send(rm,0,6)
-                call send(rhodistout(0),0,7)               
-            else                
-                ! rank0 write out.                   
-                write(11,'(10(G15.7,2x))') vnum,vdenom,vnke,vnpev6,vnpeem,rm,rhodistout(0) !11 means write to 'values.txt'                          
-            endif          
-        endif
-        if ( (myrank()==0).and.(i /= 0) ) then      
-            call recv(vnum,i,1)
-            call recv(vdenom,i,2)
-            call recv(vnke,i,3)
-            call recv(vnpev6,i,4)
-            call recv(vnpeem,i,5)
-            call recv(rm,i,6)
-            call recv(rhodistout(0),i,7)         
-      ! rank i write out.        
-        write(11,'(10(G15.7,2x))') vnum,vdenom,vnke,vnpev6,vnpeem,rm,rhodistout(0)                     
-        endif 
-    enddo
-    if (myrank().eq.0) close (11)
-    return
-    end subroutine computecore   
-    
-    
-   
-    subroutine computeupdate(iin) ! require all the cores.
-    use estimator
-    use estimatorristra
-    use wavefunction
-    use random
-    use brut
-    use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,iin
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n,valn,val2,err2,val1,err1,error
-    complex(kind=r8) :: f
-    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
-    real(kind=r8), allocatable :: rhodist(:),rhodisterr(:)
-    real(kind=r8), allocatable :: valnow(:),valaverage(:),valerr(:)
-    character(len=30) :: vpropchorizo
-
-    call update   !collect block averages
-    call updateristra
-    answer=resstring()
-      
-    if (myrank().eq.0) then   
-        write (6,*) 'path #: ', iin 
-	    write (12,*) 'path #: ', iin     
-        write (6,'(a120)') (answer(k),k=1,size(answer))
-	    write (12,'(a120)') (answer(k),k=1,size(answer))  
-    endif    
-     
-    ! show rho distribution on the fly
-	allocate(rhodist(0:nrhobin),rhodisterr(0:nrhobin))
-	call updaterhodistrbt(rhodist,rhodisterr,nchorizomid) ! choose the middle bead
-    if (myrank().eq.0) then
-	    open(unit=32,FILE='rhodistribution.txt',FORM='FORMATTED')	 
-	    do k=0,nrhobin
-	    write (32,'(i10,1x,3(f10.5,1x))') k,(k+0.5)*rhobinsize,rhodist(k),rhodisterr(k)
-	    enddo
-	    close(32) 
-    endif
-    deallocate(rhodist,rhodisterr)
-     
-    ! write out a file with the Vtot values at different chorizos
-    if (myrank().eq.0) then  
-    allocate(valnow(0:nchorizo),valaverage(0:nchorizo),valerr(0:nchorizo))
-    call resultristra(1,valnow,valaverage,valerr,vpropchorizo)
-    open(unit=33,form='formatted',file=vpropchorizo)
-    call result(4,valn,val2,err2) ! #4 is the denominator 
-    do j=0,nchorizo
-        val1=valaverage(j)
-        err1=valerr(j)  
-        error=sqrt((1./val2*err1)**2+(val1/(val2**2)*err2)**2) 
-        ! val1/val2 and error are the Vtot and error we want.
-        write (33,'(i10,f10.5,6g15.6)') j,j*dt,val1/val2,error,valaverage(j),valerr(j),val2,err2
-    enddo
-    close(33) 
-    deallocate(valnow,valaverage,valerr)
-    endif     
-    
-
-    return
-    end subroutine computeupdate  
-    
-    subroutine computeinit(answerin,rhobinsizein) ! call it before call compute
-    use estimator
-    use estimatorristra
-    use wavefunction
-    use random
-    use brut
-    use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n,rhobinsizein
-    complex(kind=r8) :: f
-    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
-    character(len=120) :: answerin(:)
-    
-
-    allocate(answer(size(answerin)))
-    rhobinsize=rhobinsizein 
-                                                                                   
-    if (myrank().eq.0) then 
-        open(unit=19,form='formatted',file='pathnumbercounts.txt',position='rewind')
-        read(19,'(3i10)') npo,ipath,ixtempo
-        close(19) 
-
-        write (6,'(''npo ='',t30,i20)') npo
-        write (6,'(''ipath ='',t30,i20)') ipath        
-        
-        write (12,'(''npo ='',t30,i20)') npo
-        write (12,'(''ipath ='',t30,i20)') ipath
-        
-        if (ipath < 1) then
-            write(6,*) 'path is empty, stop!'
-            call abort
-        endif  
-    endif
-    
-    call bcast(npo)
-    call bcast(ipath)  
-    call bcast(ixtempo)
-       
-    call barrier
-    return
-    end subroutine computeinit      
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     subroutine reptation 
     use wavefunction
     use v6stepcalc
@@ -3312,15 +2660,8 @@ contains
     if (.not.rejectbisectv6improve) ibisectl=ibisectl+1 
     return  
     end subroutine bisectv6l    
-    !
-   
-   
-   
-   
-   
-   
-   
-   
+
+
     subroutine bisectv6improvew11 ! for v6 interaction with move 1 by 1.
     use wavefunction
     use estimator
@@ -4930,8 +4271,7 @@ contains
     !   
    
 
-   
-    subroutine corrchk(xin,ixd,corr,lmax) ! make it more efficient than bisectimprove
+    subroutine corrchk(xin,ixd,corr,lmax) 
     use wavefunction
     use estimator
     use random
@@ -4945,7 +4285,7 @@ contains
     findstepdecorr=.false.
     corr=0.
     tauintg=0.
-    OPEN(31,FILE='corr.txt',FORM='FORMATTED')
+    OPEN(31,FILE='correlationcheck.txt',FORM='FORMATTED')
     WRITE(31,'(2x,5(G15.8,2x))') 'k','corr(k)','tauintg' 
     do lcorr=0,lmax     
 	    do icorr=1,ixd-lcorr
@@ -5598,10 +4938,6 @@ contains
     return
     end subroutine cleanfolder
     
-    
-    
-    
-  
     subroutine updatecwtchain ! update the whole cwtr2l, cwtl2r, cwtbegin and cwtend.
     use wavefunction
     use v6stepcalc
@@ -5634,544 +4970,1146 @@ contains
     end subroutine updatecwtchain   
 
     
-
-    
-    subroutine checkv6mat(x,psi2,psi2a)
-!  make sure this subroutine is called after some initializaiotn.
-    use matrixmod
+    subroutine compute ! call stepinit first so that get irep first.
+    use estimator
+    use estimatorristra
+    use wavefunction
+    use random
     use brut
-    use v6stepcalc
-    real(kind=r8) :: x(3,npart),x0(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin),cwtgnd(0:nspin-1,nisospin)
-    integer(kind=i4) ::  i,j,k,is,iiso 
-    complex(kind=r8) :: vij(nbasis,nbasis),vijeigvec(nbasis,nbasis),npsitr(nbasis),npsitl(nbasis) &
-                       ,evijdt(nbasis,nbasis),evijdt1(nbasis,nbasis),evijtt(nbasis,nbasis),evijtt1(nbasis,nbasis) &
-                       ,cwtbegin1(nbasis),cwtend1(nbasis),cwtend1t(nbasis,1),cwtbegin1t(1,nbasis) &
-                       ,c1(nbasis,nbasis)
-    real(kind=r8) :: elambdadt(nbasis,nbasis)
-    real(kind=r8) :: vijeigval(nbasis),psi2,tt,psi2a(1,1),psi2b,psi2tmp
+    use mympi
+    use math
+    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb &
+                    ,time0,time1,time2,timeall,second
+    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
+	                ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
+    integer(kind=i4) :: i,i1,j,k,k0,l,m,n,ipick,ixd,lmax,icheck,ixtemp,nmax,nmax1,nmax2
+    integer(kind=i4) :: np,n1,m1,n2,m2,n3,m3,n4,n4c,m4,m4c,n5,n51,n5c,m5,n6,n61,n6c,m6,lnow &
+                      ,idummy1,idummy2,npatheach0,npatheach,rankl,rankr &
+                      ,day,hour,minute
+    integer(kind=i4) :: ipathtot,ipathnow,ipathrest,ipc1,ipc2,ipc3 ! check i4 or i8
+    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
+                    ,sum1,sum2
+    real(kind=r8) :: psi20,psi2n
+    complex(kind=r8) :: f
+    integer(kind=i4), allocatable :: icheck1d(:)
+    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
+    integer(kind=i4), allocatable :: iplall(:,:),jplall(:,:),iprall(:,:),jprall(:,:)	! for mpi_gather
+    real(kind=r8), allocatable :: xall(:,:) ! for mpi_gather
+    integer(kind=i4), allocatable :: iplallo(:),jplallo(:),iprallo(:),jprallo(:)	
+    real(kind=r8), allocatable :: xallo(:) 
+    integer(kind=i4), allocatable :: iplalln(:),jplalln(:),ipralln(:),jpralln(:)	
+    real(kind=r8), allocatable :: xalln(:)  
+    real(kind=r8), allocatable :: xtotnow(:)
+    integer(kind=i4), allocatable :: iplnow(:),jplnow(:),iprnow(:),jprnow(:)	
+    logical :: supermode ! true = turn on the big ram read in mode.
+    logical :: loaded,finished,loadmore,loadextra,loadedextra
     
-    tt=dt*nchorizo    
-    
-    call v6mat(x,vij,vijeigvec,vijeigval)
- 
-    CALL PRINT_MATRIX( 'Vijmatrix', nbasis, nbasis, vij, nbasis ) 
-    CALL PRINT_MATRIX( 'Vijdagmatrix', nbasis, nbasis, conjg((transpose(vij))), nbasis ) 
-    CALL PRINT_RMATRIX( 'Eigenvalues', 1, nbasis, vijeigval, 1 )
-    CALL PRINT_MATRIX( 'Eigenvectors (stored columnwise)', nbasis, nbasis, vijeigvec, nbasis )  
-    CALL PRINT_RMATRIX( 'exp Eigenvalues totol time', 1, nbasis, exp(-vijeigval*tt), 1 ) 
-      
-!   get <n|psi_t(r)>  
+    ixtemp=3*npart*(nchorizo+1)    
+    if (ixtemp /= ixtempo) then
+       if (myrank().eq.0) then     
+           write (6,*) 'ixtemp and ixtemp old does not match! check!'
+           call abort
+       endif  
+    endif
+            
+    ipathtot=ipath*npo
+    np=nproc()        
+    n1=npo/np
+    m1=mod(npo,np)
         
-    do i=1,nbasis    
-       cwtend1(i)=cwtend(invspin(i),invispin(i))
-       cwtbegin1(i)=cwtbegin(invspin(i),invispin(i))
-    enddo
+    n2=ipathtot/np
+    m2=mod(ipathtot,np)
+        
+    npatheach0=10 ! it can change to a proper value according to the speed.
+    npatheach=min(npatheach0,n2) ! # of paths per core for each step of calculation.
+    n3=npatheach/npatheach0
+        
+    n4=np/npo 
+    m4=mod(np,npo)
 
-    do i=1,nbasis
-       npsitr(i)=sum(conjg(vijeigvec(:,i))*cwtend1(:))
-       npsitl(i)=sum(conjg(vijeigvec(:,i))*cwtbegin1(:)) 
-       !npsitl(i)=sum(conjg(cwtbegin1(:))*vijeigvec(:,i)) ! already conjugated
-    enddo
+    loaded=.false.
+    loadmore=.false.
+    loadextra=.false.
+    loadedextra=.false.        
+       
+    select case (irep)
+           
+    case (5)  ! the usual way, read in a path then calcualte. 
+        
+        if (myrank().eq.0) then   
+            allocate(xallo(ixtemp*npo))
+            allocate(iplallo(6*npo),jplallo(6*npo),iprallo(6*npo),jprallo(6*npo))   
+            allocate(xalln(ixtemp*np))
+            allocate(iplalln(6*np),jplalln(6*np),ipralln(6*np),jpralln(6*np))   
+            open(unit=19,form='unformatted',file='path.unf',position='rewind')   
+        endif                             
+        if (n4 == 0) then ! npo # > np         
+           if (m1>0) n6=np/m1  ! np<npo             
+           if (myrank().eq.0) then   
+                if (n6>1) then       
+                    allocate(xall( (ixtemp*n1*np+1):ixtemp*npo,n6))
+                    allocate(iplall((6*n1*np+1):6*npo,n6),jplall((6*n1*np+1):6*npo,n6) &
+                            ,iprall((6*n1*np+1):6*npo,n6),jprall((6*n1*np+1):6*npo,n6))                         
+                endif
+           endif                   
+            n6c=0          
+            do i=1,ipath  
+                if (myrank()==0) then  ! read in the old path file.  
+                    if (i==1) time0=mpi_wtime()
+                    read (19) ipathnow
+                 do l=0,npo-1    
+                    read (19) lnow
+                    read (19) iplallo((6*l+1):(6*(l+1))) 
+                    read (19) jplallo((6*l+1):(6*(l+1))) 
+                    read (19) iprallo((6*l+1):(6*(l+1))) 
+                    read (19) jprallo((6*l+1):(6*(l+1))) 
+                    read (19) xallo((ixtemp*l+1):(ixtemp*(l+1)))               
+                 enddo                          
+                endif  
+                do j=1,n1   
+                    if (myrank().eq.0) then
+                        do k=0,np-1                
+                            l=np*(j-1)+k ! convert the current core # from new to old. 
+                            if (k /= 0) then
+                                call send(iplallo((6*l+1):(6*(l+1))),k,1) 
+                                call send(jplallo((6*l+1):(6*(l+1))),k,2)
+                                call send(iprallo((6*l+1):(6*(l+1))),k,3) 
+                                call send(jprallo((6*l+1):(6*(l+1))),k,4) 
+                                call send(xallo((ixtemp*l+1):(ixtemp*(l+1))),k,5)      
+                            else ! send to process 0.
+                                iplo=iplallo((6*l+1):(6*(l+1)))
+                                jplo=jplallo((6*l+1):(6*(l+1)))
+                                ipro=iprallo((6*l+1):(6*(l+1)))
+                                jpro=jprallo((6*l+1):(6*(l+1)))
+                                x0tot1d=xallo((ixtemp*l+1):(ixtemp*(l+1)))
+                            endif          
+                        enddo
+                    else                                        
+                        call recv(iplo,0,1)
+                        call recv(jplo,0,2)
+                        call recv(ipro,0,3)
+                        call recv(jpro,0,4)
+                        call recv(x0tot1d,0,5)                  
+                    endif            
+                    ! calculate                          
+                    x0tot=reshape(x0tot1d,shape(x0tot)) 
+                    call computecore(x0tot,iplo,jplo,ipro,jpro,0,np-1)    
+                    ! update                       
+                    call barrier
+                    call computeupdate(i) ! require all the cores.   
+                    if ((j.eq.n1).and.(myrank().eq.0).and.(i==1)) then
+                        time1=mpi_wtime()
+                        timeall=(time1-time0)*dble(ipathtot)/dble(n1*np)
+                        call timedhms(timeall,day,hour,minute,second)                        
+    write (6,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+           day,hour,minute,second
+    write (12,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+           day,hour,minute,second         
+                    endif  
+                enddo   
+                if (m1 > 0) then  !        deal with the rest and calculate                              
+                 if (n6 <= 1) then                   
+                    if ( myrank()<=m1-1 ) then  
+                        if (myrank().eq.0) then            
+                            do k=0,m1-1             
+                                l=np*n1+k
+                                if (k /= 0) then
+                                    call send(iplallo((6*l+1):(6*(l+1))),k,1) 
+                                    call send(jplallo((6*l+1):(6*(l+1))),k,2)
+                                    call send(iprallo((6*l+1):(6*(l+1))),k,3) 
+                                    call send(jprallo((6*l+1):(6*(l+1))),k,4) 
+                                    call send(xallo((ixtemp*l+1):(ixtemp*(l+1))),k,5) 
+                                else
+                                    iplo=iplallo((6*l+1):(6*(l+1)))
+                                    jplo=jplallo((6*l+1):(6*(l+1)))
+                                    ipro=iprallo((6*l+1):(6*(l+1)))
+                                    jpro=jprallo((6*l+1):(6*(l+1)))
+                                    x0tot1d=xallo((ixtemp*l+1):(ixtemp*(l+1)))
+                                endif        
+                            enddo                                                         
+                        else                    
+                            call recv(iplo,0,1)
+                            call recv(jplo,0,2)
+                            call recv(ipro,0,3)
+                            call recv(jpro,0,4)
+                            call recv(x0tot1d,0,5)                    
+                        endif                   
+                    endif  
+                    if ( myrank()<=m1-1 ) then                  
+                        x0tot=reshape(x0tot1d,shape(x0tot))             
+                        call computecore(x0tot,iplo,jplo,ipro,jpro,0,m1-1) 
+                    endif
+                    call barrier 
+                    call computeupdate(i)                     
+                 else ! n6 >1             
+                     n6c=n6c+1                    
+                     if (myrank().eq.0) then                         
+                        do l=n1*np,npo-1 
+                            iplall((6*l+1):(6*(l+1)),n6c)=iplallo((6*l+1):(6*(l+1)))
+                            jplall((6*l+1):(6*(l+1)),n6c)=jplallo((6*l+1):(6*(l+1)))
+                            iprall((6*l+1):(6*(l+1)),n6c)=iprallo((6*l+1):(6*(l+1)))
+                            jprall((6*l+1):(6*(l+1)),n6c)=jprallo((6*l+1):(6*(l+1)))
+                            xall((ixtemp*l+1):(ixtemp*(l+1)),n6c)=xallo((ixtemp*l+1):(ixtemp*(l+1)))                        
+                        enddo                  
+                     endif                   
+                     if ( (n6c.eq.n6).or.((i.eq.ipath).and.(n6c<n6).and.(n6c>0)) ) then                        
+                         if (myrank()<=m1*n6c-1) then                            
+                             if (myrank().eq.0) then                                
+                                 do k=0,m1*n6c-1                   
+                                   n61=k/m1+1    
+                                   l=n1*np+mod(k,m1)
+                                   if (k/=0) then
+                                       call send( iplall((6*l+1):(6*(l+1)),n61),k,1   )
+                                       call send( jplall((6*l+1):(6*(l+1)),n61),k,2   )
+                                       call send( iprall((6*l+1):(6*(l+1)),n61),k,3   )
+                                       call send( jprall((6*l+1):(6*(l+1)),n61),k,4   )
+                                       call send( xall((ixtemp*l+1):(ixtemp*(l+1)),n61),k,5 )
+                                   else
+                                       iplo=iplall((6*l+1):(6*(l+1)),n61)
+                                       jplo=jplall((6*l+1):(6*(l+1)),n61)
+                                       ipro=iprall((6*l+1):(6*(l+1)),n61)
+                                       jpro=jprall((6*l+1):(6*(l+1)),n61)
+                                       x0tot1d=xall((ixtemp*l+1):(ixtemp*(l+1)),n61)
+                                   endif                                     
+                                 enddo
+                             else                
+                                call recv(iplo,0,1)
+                                call recv(jplo,0,2)
+                                call recv(ipro,0,3)
+                                call recv(jpro,0,4)
+                                call recv(x0tot1d,0,5)                
+                             endif                   
+                          x0tot=reshape(x0tot1d,shape(x0tot))             
+                          call computecore(x0tot,iplo,jplo,ipro,jpro,0,m1*n6c-1)                        
+                         endif   
+                       call barrier
+                       call computeupdate(i) ! require all the cores.                                            
+                         n6c=0                                      
+                     endif                 
+                 endif                                
+                endif                
+            enddo                      
+        else ! np >= npo                 
+            n5=np/(npo-m4)       ! save the rest ones.     
+            if (myrank().eq.0) then     
+                allocate(xall((ixtemp*m4+1):ixtemp*npo,n5))
+                allocate(iplall((6*m4+1):6*npo,n5),jplall((6*m4+1):6*npo,n5) &
+                        ,iprall((6*m4+1):6*npo,n5),jprall((6*m4+1):6*npo,n5))         
+            endif        
+            n4c=0 ! count n4
+            n5c=0   
+            do i=1,ipath
+                if (myrank()==0) then
+                    time0=mpi_wtime()
+                    read (19) ipathnow
+                    do l=0,npo-1    
+                        read (19) lnow
+                        read (19) iplallo((6*l+1):(6*(l+1))) 
+                        read (19) jplallo((6*l+1):(6*(l+1))) 
+                        read (19) iprallo((6*l+1):(6*(l+1))) 
+                        read (19) jprallo((6*l+1):(6*(l+1))) 
+                        read (19) xallo((ixtemp*l+1):(ixtemp*(l+1)))               
+                    enddo  
+                endif                                     
+                n4c=n4c+1 ! n4                   
+                if (npo*n4c>np) then
+                   loadextra =.true. 
+                else     
+                   loadextra =.false. 
+                endif  
+                if (loadextra) then
+                    nmax1=m4-1
+                else
+                    nmax1=npo-1
+                endif
+                k0=npo*(n4c-1) 
+                nmax=k0+nmax1            
+                if ( myrank().eq.0 ) then        
+                    do l=0,nmax1
+                        k=k0+l
+                        if (k/=0) then
+                            call send(iplallo((6*l+1):(6*(l+1))),k,1) 
+                            call send(jplallo((6*l+1):(6*(l+1))),k,2)
+                            call send(iprallo((6*l+1):(6*(l+1))),k,3) 
+                            call send(jprallo((6*l+1):(6*(l+1))),k,4) 
+                            call send(xallo((ixtemp*l+1):(ixtemp*(l+1))),k,5)
+                        else ! send to rank0 itself.
+                            iplo=iplallo((6*l+1):(6*(l+1)))
+                            jplo=jplallo((6*l+1):(6*(l+1)))
+                            ipro=iprallo((6*l+1):(6*(l+1)))
+                            jpro=jprallo((6*l+1):(6*(l+1)))
+                            x0tot1d=xallo((ixtemp*l+1):(ixtemp*(l+1)))                        
+                        endif 
+                    enddo                                   
+                    if ( loadextra ) then
+                        n5c=n5c+1
+                        do l=m4,npo-1
+                            iplall((6*l+1):(6*(l+1)),n5c)=iplallo((6*l+1):(6*(l+1)))
+                            jplall((6*l+1):(6*(l+1)),n5c)=jplallo((6*l+1):(6*(l+1)))
+                            iprall((6*l+1):(6*(l+1)),n5c)=iprallo((6*l+1):(6*(l+1)))
+                            jprall((6*l+1):(6*(l+1)),n5c)=jprallo((6*l+1):(6*(l+1)))
+                            xall((ixtemp*l+1):(ixtemp*(l+1)),n5c)=xallo((ixtemp*l+1):(ixtemp*(l+1)))
+                        enddo
+                    endif     
+                endif                             
+                if ( (myrank() /= 0).and.(myrank() >= k0).and.( myrank() <= nmax ) ) then
+                    call recv(iplo,0,1)
+                    call recv(jplo,0,2)
+                    call recv(ipro,0,3)
+                    call recv(jpro,0,4)
+                    call recv(x0tot1d,0,5)            
+                endif                                      
+               if (loadextra) loaded=.true.  
+               call bcast(n5c)
+               if (n5c.eq.n5) loadedextra=.true.                                 
+                if (m4==0) then              
+                   if (  (n4c==n4).or.(i==ipath)   ) then              
+                    loaded=.true.
+                   else                  
+                    loaded=.false.                 
+                   endif              
+                else  ! load extra may needed. loadmore              
+                   if (i<ipath) then 
+                       if (.not.loadextra  ) then
+                            loaded=.false.                              
+                       else
+                            loaded=.true.
+                       endif                        
+                   else                    
+                       loaded=.true.                    
+                   endif
+                endif                                          
+               if (loaded) then
+                  if (myrank()<=nmax) then
+                      x0tot=reshape(x0tot1d,shape(x0tot))             
+                      call computecore(x0tot,iplo,jplo,ipro,jpro,0,nmax)       
+                  endif
+                  call barrier
+                  call computeupdate(i) ! require all the cores.                                                 
+                   ! reset
+                   n4c=0
+                   loaded=.false.                     
+                   if (((i.eq.n4).or.(i.eq.n4+1)).and.myrank().eq.0) then
+                        time1=mpi_wtime()
+                        timeall=(time1-time0)*dble(ipathtot)/dble(np)
+                        call timedhms(timeall,day,hour,minute,second)                        
+    write (6,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+           day,hour,minute,second
+    write (12,'(/,''Estimated total time ='',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+           day,hour,minute,second                                          
+                   endif
+                   if ( (loadedextra).or.((i.eq.ipath).and.(.not.loadedextra).and.(n5c/=0)) ) then                                                 
+                       nmax2=n5c*(npo-m4)-1           
+                       if (myrank().eq.0) then                 
+                           do  k=0,nmax2
+                               n51=k/(npo-m4)+1
+                               l=m4+mod(k,npo-m4)  !m4+k-(n51-1)*(npo-m4)   ! check!!!!!!!!!!!!!!!!!!                                   
+                               if (k/=0) then
+                                   call send( iplall((6*l+1):(6*(l+1)),n51),k,1   )
+                                   call send( jplall((6*l+1):(6*(l+1)),n51),k,2   )
+                                   call send( iprall((6*l+1):(6*(l+1)),n51),k,3   )
+                                   call send( jprall((6*l+1):(6*(l+1)),n51),k,4   )
+                                   call send( xall((ixtemp*l+1):(ixtemp*(l+1)),n51),k,5 )
+                               else
+                                   iplo=iplall((6*l+1):(6*(l+1)),n51)
+                                   jplo=jplall((6*l+1):(6*(l+1)),n51)
+                                   ipro=iprall((6*l+1):(6*(l+1)),n51)
+                                   jpro=jprall((6*l+1):(6*(l+1)),n51)
+                                   x0tot1d=xall((ixtemp*l+1):(ixtemp*(l+1)),n51)
+                               endif                                          
+                           enddo
+                       else if ( myrank() <= nmax2 ) then
+                            call recv(iplo,0,1)
+                            call recv(jplo,0,2)
+                            call recv(ipro,0,3)
+                            call recv(jpro,0,4)
+                            call recv(x0tot1d,0,5)                    
+                       endif
+                       if (myrank() <= nmax2) then
+                          x0tot=reshape(x0tot1d,shape(x0tot))             
+                          call computecore(x0tot,iplo,jplo,ipro,jpro,0,nmax2)    
+                       endif   
+                       call barrier
+                       call computeupdate(i) ! require all the cores.
+                           ! reset
+                           n5c=0
+                           loadedextra=.false.      
+                   endif                                                 
+               endif                     
+            call barrier
+            enddo
+        endif       
+        call barrier
+        if (myrank().eq.0) close (19)        
+            
+    case (6)
+        
+        ! aother mode, change the way the pimc output the path.unf,
+        ! not decided and checked yet.
+        ! or may besupermode, do not need to consider ram resource problem, big ram is ready. bug need to fix
+               
+          if (myrank().eq.0) then
+              
+              write(6,*) 'irep=6 case has not been decided yet, abort!'
+              call abort
+          endif
+                 
+    case default
+        write (6,'(''Illegal irep value in compute, irep= '')') irep
+        call abort      
+        
+    end select
 
-    !CALL PRINT_CMATRIX( 'npsitr', 1, nbasis, npsitr, 1 )
-    !CALL PRINT_CMATRIX( 'npsitl', 1, nbasis, npsitl, 1 )
+    return
+    end subroutine compute
     
-    psi2=sum(conjg(npsitl(:))*exp(-vijeigval(:)*tt)*npsitr(:)) 
-!psi2 is real part of f. if npsitl is already conjugated then no need to conjg it here again.
+    subroutine computecore(x0totin,iploin,jploin,iproin,jproin,rankl,rankr) 
+! read in path, calculate all the results. and write to a file
+! rank1 must be zero   
+    use estimator
+    use estimatorristra
+    use wavefunction
+    use random
+    use brut
+    use mympi
+    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
+    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
+	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
+    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,rankl,rankr
+    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
+                    ,sum1,sum2
+    real(kind=r8) :: psi20,psi2n
+    complex(kind=r8) :: f
+    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
+    integer(kind=i4), allocatable :: icheck1d(:)
+    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
+    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
+    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+ 
+! init   
+    call chorizoallin(x0totin)
+    call inputordlr(iploin,jploin,iproin,jproin)   
+    call updatecwtchain
     
-    !psi2tmp=0
-    !do i=1,nbasis
-    !   psi2tmp=psi2tmp+(npsitl(i))*exp(-vijeigval(i)*tt)*npsitr(i)  
-    !   write (6,'(10g15.7)') i,(npsitl(i)),exp(-vijeigval(i)*tt),npsitr(i) &
-    !                             ,(npsitl(i))*exp(-vijeigval(i)*tt)*npsitr(i)  
-    !   write (6,'(2g15.7)') i, psi2tmp
+! calculate    
+    call hpsi(ristra(0),ristra(nchorizo),vn,vd,vnke,vnpev6,vnpeem,psi20,psi2n,rf,icheck)
+    vnum=vn
+    vdenom=vd
+    ! update the v beads   
+    do i=0,nchorizo
+        call vtot(i,v(i))
+    enddo
+    v=v/rf
+    call addvalristra(1,v) ! do not need this part   
+   
+    call addval(3,vnum,1.0_r8)
+    call addval(4,vdenom,1.0_r8)
+	call addval(5,rf,1.0_r8)    
+
+	call funcrmsq(ristra(nchorizomid)%x,rm,rmsq)
+	call addval(6,rmsq,1.0_r8)
+	call addval(7,rm,1.0_r8)
+    
+	call samplerhodistrbt(ristra(nchorizomid)%x,nchorizomid,rhodistout)	  
+	call addval(8,rhodistout(0),1.0_r8)
+  
+    ! write out all the num and denom of all the cores
+
+    if (myrank().eq.0) open (unit=11,FILE='values.txt',FORM='FORMATTED',position='append')    
+    do i=rankl,rankr ! rank1 must be zero     
+        if ( myrank().eq.i  ) then         
+            if (myrank() /= 0) then         
+                call send(vnum,0,1)
+                call send(vdenom,0,2)
+                call send(vnke,0,3)
+                call send(vnpev6,0,4)
+                call send(vnpeem,0,5)
+                call send(rm,0,6)
+                call send(rhodistout(0),0,7)               
+            else                
+                ! rank0 write out.                   
+                write(11,'(10(G15.7,2x))') vnum,vdenom,vnke,vnpev6,vnpeem,rm,rhodistout(0) !11 means write to 'values.txt'                          
+            endif          
+        endif
+        if ( (myrank()==0).and.(i /= 0) ) then      
+            call recv(vnum,i,1)
+            call recv(vdenom,i,2)
+            call recv(vnke,i,3)
+            call recv(vnpev6,i,4)
+            call recv(vnpeem,i,5)
+            call recv(rm,i,6)
+            call recv(rhodistout(0),i,7)         
+      ! rank i write out.        
+        write(11,'(10(G15.7,2x))') vnum,vdenom,vnke,vnpev6,vnpeem,rm,rhodistout(0)                     
+        endif 
+    enddo
+    if (myrank().eq.0) close (11)
+    return
+    end subroutine computecore   
+    
+    subroutine computeupdate(iin) ! require all the cores.
+    use estimator
+    use estimatorristra
+    use wavefunction
+    use random
+    use brut
+    use mympi
+    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
+    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
+	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
+    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,iin
+    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
+                    ,sum1,sum2
+    real(kind=r8) :: psi20,psi2n,valn,val2,err2,val1,err1,error
+    complex(kind=r8) :: f
+    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
+    integer(kind=i4), allocatable :: icheck1d(:)
+    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
+    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
+    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+    real(kind=r8), allocatable :: rhodist(:),rhodisterr(:)
+    real(kind=r8), allocatable :: valnow(:),valaverage(:),valerr(:)
+    character(len=30) :: vpropchorizo
+
+    call update   !collect block averages
+    call updateristra
+    answer=resstring()
+      
+    if (myrank().eq.0) then   
+        write (6,*) 'path #: ', iin 
+	    write (12,*) 'path #: ', iin     
+        write (6,'(a120)') (answer(k),k=1,size(answer))
+	    write (12,'(a120)') (answer(k),k=1,size(answer))  
+    endif    
+     
+    ! show rho distribution on the fly
+	allocate(rhodist(0:nrhobin),rhodisterr(0:nrhobin))
+	call updaterhodistrbt(rhodist,rhodisterr,nchorizomid) ! choose the middle bead
+    if (myrank().eq.0) then
+	    open(unit=32,FILE='rhodistribution.txt',FORM='FORMATTED')	 
+	    do k=0,nrhobin
+	    write (32,'(i10,1x,3(f10.5,1x))') k,(k+0.5)*rhobinsize,rhodist(k),rhodisterr(k)
+	    enddo
+	    close(32) 
+    endif
+    deallocate(rhodist,rhodisterr)
+     
+    ! write out a file with the Vtot values at different chorizos
+    if (myrank().eq.0) then  
+    allocate(valnow(0:nchorizo),valaverage(0:nchorizo),valerr(0:nchorizo))
+    call resultristra(1,valnow,valaverage,valerr,vpropchorizo)
+    open(unit=33,form='formatted',file=vpropchorizo)
+    call result(4,valn,val2,err2) ! #4 is the denominator 
+    do j=0,nchorizo
+        val1=valaverage(j)
+        err1=valerr(j)  
+        error=sqrt((1./val2*err1)**2+(val1/(val2**2)*err2)**2) 
+        ! val1/val2 and error are the Vtot and error we want.
+        write (33,'(i10,f10.5,6g15.6)') j,j*dt,val1/val2,error,valaverage(j),valerr(j),val2,err2
+    enddo
+    close(33) 
+    deallocate(valnow,valaverage,valerr)
+    endif     
+    
+
+    return
+    end subroutine computeupdate  
+    
+    subroutine computeinit(answerin,rhobinsizein) ! call it before call compute
+    use estimator
+    use estimatorristra
+    use wavefunction
+    use random
+    use brut
+    use mympi
+    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
+    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
+	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
+    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp
+    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
+                    ,sum1,sum2
+    real(kind=r8) :: psi20,psi2n,rhobinsizein
+    complex(kind=r8) :: f
+    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
+    integer(kind=i4), allocatable :: icheck1d(:)
+    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
+    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
+    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+    character(len=120) :: answerin(:)
+    
+
+    allocate(answer(size(answerin)))
+    rhobinsize=rhobinsizein 
+                                                                                   
+    if (myrank().eq.0) then 
+        open(unit=19,form='formatted',file='pathnumbercounts.txt',position='rewind')
+        read(19,'(3i10)') npo,ipath,ixtempo
+        close(19) 
+
+        write (6,'(''npo ='',t30,i20)') npo
+        write (6,'(''ipath ='',t30,i20)') ipath        
+        
+        write (12,'(''npo ='',t30,i20)') npo
+        write (12,'(''ipath ='',t30,i20)') ipath
+        
+        if (ipath < 1) then
+            write(6,*) 'path is empty, stop!'
+            call abort
+        endif  
+    endif
+    
+    call bcast(npo)
+    call bcast(ipath)  
+    call bcast(ixtempo)
+       
+    call barrier
+    return
+    end subroutine computeinit      
+    
+    
+    
+
+!!!!!!!!!!!! this part is just to check m6matrix !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
+!    subroutine checkv6mat(x,psi2,psi2a)
+!!  make sure this subroutine is called after some initializaiotn.
+!    use matrixmod
+!    use brut
+!    use v6stepcalc
+!    real(kind=r8) :: x(3,npart),x0(3,npart)
+!    complex(kind=r8) :: cwt(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin),cwtgnd(0:nspin-1,nisospin)
+!    integer(kind=i4) ::  i,j,k,is,iiso 
+!    complex(kind=r8) :: vij(nbasis,nbasis),vijeigvec(nbasis,nbasis),npsitr(nbasis),npsitl(nbasis) &
+!                       ,evijdt(nbasis,nbasis),evijdt1(nbasis,nbasis),evijtt(nbasis,nbasis),evijtt1(nbasis,nbasis) &
+!                       ,cwtbegin1(nbasis),cwtend1(nbasis),cwtend1t(nbasis,1),cwtbegin1t(1,nbasis) &
+!                       ,c1(nbasis,nbasis)
+!    real(kind=r8) :: elambdadt(nbasis,nbasis)
+!    real(kind=r8) :: vijeigval(nbasis),psi2,tt,psi2a(1,1),psi2b,psi2tmp
+!    
+!    tt=dt*nchorizo    
+!    
+!    call v6mat(x,vij,vijeigvec,vijeigval)
+! 
+!    CALL PRINT_MATRIX( 'Vijmatrix', nbasis, nbasis, vij, nbasis ) 
+!    CALL PRINT_MATRIX( 'Vijdagmatrix', nbasis, nbasis, conjg((transpose(vij))), nbasis ) 
+!    CALL PRINT_RMATRIX( 'Eigenvalues', 1, nbasis, vijeigval, 1 )
+!    CALL PRINT_MATRIX( 'Eigenvectors (stored columnwise)', nbasis, nbasis, vijeigvec, nbasis )  
+!    CALL PRINT_RMATRIX( 'exp Eigenvalues totol time', 1, nbasis, exp(-vijeigval*tt), 1 ) 
+!      
+!!   get <n|psi_t(r)>  
+!        
+!    do i=1,nbasis    
+!       cwtend1(i)=cwtend(invspin(i),invispin(i))
+!       cwtbegin1(i)=cwtbegin(invspin(i),invispin(i))
+!    enddo
+!
+!    do i=1,nbasis
+!       npsitr(i)=sum(conjg(vijeigvec(:,i))*cwtend1(:))
+!       npsitl(i)=sum(conjg(vijeigvec(:,i))*cwtbegin1(:)) 
+!       !npsitl(i)=sum(conjg(cwtbegin1(:))*vijeigvec(:,i)) ! already conjugated
+!    enddo
+!
+!    !CALL PRINT_CMATRIX( 'npsitr', 1, nbasis, npsitr, 1 )
+!    !CALL PRINT_CMATRIX( 'npsitl', 1, nbasis, npsitl, 1 )
+!    
+!    psi2=sum(conjg(npsitl(:))*exp(-vijeigval(:)*tt)*npsitr(:)) 
+!!psi2 is real part of f. if npsitl is already conjugated then no need to conjg it here again.
+!    
+!    !psi2tmp=0
+!    !do i=1,nbasis
+!    !   psi2tmp=psi2tmp+(npsitl(i))*exp(-vijeigval(i)*tt)*npsitr(i)  
+!    !   write (6,'(10g15.7)') i,(npsitl(i)),exp(-vijeigval(i)*tt),npsitr(i) &
+!    !                             ,(npsitl(i))*exp(-vijeigval(i)*tt)*npsitr(i)  
+!    !   write (6,'(2g15.7)') i, psi2tmp
+!    !enddo
+!    
+! 
+!! matmul
+!    
+!    elambdadt=0
+!    do i=1,nbasis
+!       elambdadt(i,i)=exp(-dt*vijeigval(i))
+!    enddo
+!   
+!    evijdt=matmul(vijeigvec,matmul(elambdadt,conjg(transpose(vijeigvec))))
+!  
+!    evijtt=0
+!    do i=1,nbasis
+!       evijtt(i,i)=1 
+!    enddo 
+!    do i=1,nchorizo    
+!        evijtt=matmul(evijtt,evijdt)   
+!    enddo
+!
+!    cwtbegin1t(1,:)=cwtbegin1(:)
+!    cwtend1t(:,1)=cwtend1(:)
+!    psi2a=matmul(conjg(cwtbegin1t),matmul(evijtt,cwtend1t))
+!     
+!! regular
+!    
+!    do j=1,nbasis
+!        do i=1,nbasis
+!           evijdt1(i,j)=sum(vijeigvec(i,:)*exp(-dt*vijeigval(:))*conjg(vijeigvec(j,:)))       
+!        enddo  
+!    enddo
+!    
+!    CALL PRINT_MATRIX( 'evdt', nbasis, nbasis, evijdt, nbasis ) 
+!    call PRINT_MATRIX( 'evdt1', nbasis, nbasis, evijdt1, nbasis ) 
+!      
+!    evijtt1=0
+!    do i=1,nbasis
+!       evijtt1(i,i)=1 
+!    enddo     
+!    do i=1,nchorizo    
+!        evijtt1=matmul(evijtt1,evijdt1)   
+!    enddo   
+!    
+!    CALL PRINT_MATRIX( 'evtt', nbasis, nbasis, evijtt, nbasis ) 
+!    call PRINT_MATRIX( 'evtt1', nbasis, nbasis, evijtt1, nbasis )     
+!    
+!    c1=matmul(vijeigvec,conjg(transpose(vijeigvec)))
+!    CALL PRINT_MATRIX( 'nnh', nbasis, nbasis, c1, nbasis ) ! eigenvec*eigenvec^dagger=1
+!    write(6,*) 'c1=', sum(c1)
+!    
+!    return
+!    end subroutine checkv6mat 
+!
+!    subroutine sdv6(x)
+!!  Method of steepest descent
+!    use matrixmod
+!    use brut
+!    use v6stepcalc
+!    real(kind=r8) :: x(3,npart),xo(3,npart),xn(3,npart),xrvs(3,npart) &
+!                    ,lambda,t,error,errorx,g(3,npart),go(3,npart),gn(3,npart),f,fo,fn,ta,tb,tc &
+!                    ,ga(3,npart),gb(3,npart),gc(3,npart) &
+!                    ,step1,fa,fb,fc,step,step0,stepnow
+!    real(kind=r8), allocatable :: trial1(:)
+!    real(kind=r8), parameter :: small=1.0d-10,tiny=1.0d-10,epsilon=1.0d-8 &
+!                               ,w=(3-sqrt(5.0_r8))/2,phi=(1+sqrt(5.0_r8))/2
+!    integer(kind=i4) :: find1(1),pieces,i,j,k,l,lmax,ct,ia,ib,ic
+!    logical :: abcdone,adone,bdone,cdone
+!    
+!    lmax=1000
+!    step0=1.0d-5
+!    step=step0
+!    abcdone=.false.
+!    adone=.true.
+!    bdone=.false.
+!    cdone=.false.
+!    pieces=33
+!    allocate(trial1(pieces))
+!     
+!    ta=0
+!    xo=x
+!
+!    call ftest(xo,fo)
+!    write(6,*) 'f initial =', fo
+!    fa=fo
+!    !write(6,*) 'x initial =', xo 
+!    call gtest(xo,go)
+!    write(6,*) 'g initial =', go 
+!    g=go
+!    
+!    l=0
+!    ct=20
+!    open(unit=9,form='formatted',file='sdv6',position='rewind')
+!    write (9,'(13g15.7)') xo,fo
+!    
+!    all: do while (ct>=0)
+!        
+!!!!!!!!!!!!!!!!!!!!!!!!! 
+!        
+!! for a given x, find the min t.           
+!           ib=0
+!           sub1: do while (.not.bdone)          
+!               t=ta+step 
+!               call ftabc(x,t,g,fn)
+!               if (fn<fa) then
+!                   tb=t
+!                   fb=fn
+!                   bdone=.true.
+!                   stepnow=step
+!               else
+!                   step=step/10  ! do this to ensure ta=0, fa>fb.
+!                   write(6,*) 'try b again',step,fn,fo
+!                   ib=ib+1
+!                   if (ib >= 10) then 
+!                      step=stepnow/(10.0_r8**(ib-10)) ! this 10._r8, the _r8 is important.
+!                      x=xrvs
+!                      call gtest(x,g) 
+!                   endif   
+! 
+!                  ! can add a random monte carlo search here perhaps.
+!                   
+!                   if (ib >= 300) then
+!                       write(6,*) 'it looks like minimal is found and recorded already.'
+!                       exit all
+!                   endif    
+!               endif   
+!           enddo sub1
+!           sub2: do while (.not.cdone)
+!               t=tb+phi*(tb-ta) 
+!               call ftabc(x,t,g,fn)
+!               if (fn>fb) then
+!                   tc=t
+!                   fc=fn
+!                   cdone=.true.
+!                   write(6,*) 'ta,tb,tc: ', ta,tb,tc
+!                   write(6,*) 'fa,fb,fc: ', fa,fb,fc
+!               else
+!                   ta=tb
+!                   tb=t 
+!                   fa=fb
+!                   fb=fn
+!                   write(6,*) 'try c again',fn,fb,fa
+!               endif   
+!           enddo sub2          
+!     ! until here we find ta,tb,tc. next need to fine the t to minimize f
+!                
+!           step1=(tc-ta)/pieces
+!           do i=1,pieces
+!               t=ta+i*step1
+!               call ftabc(x,t,g,fn)
+!               trial1(i)=fn
+!           enddo
+!           
+!           find1=minloc(trial1)
+!           
+!           t=ta+find1(1)*step1
+!           xrvs=xo ! save the old x.
+!           !xrvs=xo+(ta+min(pieces,max(0,find1(1)-1))*step1)*g
+!           x=x+t*g   
+!  
+!           call ftest(x,fn)
+!           xn=x
+!           write(6,*) 'fn=', fn
+!           !write(6,*) 'xnew=', xn          
+!           call gtest(x,g) ! update g.
+!           write (9,'(25g15.7)') xn,fn,g
+!           error=abs(fn-fo)
+!           errorx=abs(sum((xn(:,:)-xo(:,:))**2))
+!           write(6,*) 'error,errorx=', error,errorx
+!
+!! update           
+!           fa=fn
+!           bdone=.false.
+!           cdone=.false.           
+!           ta=0           
+!           xo=xn 
+!           fo=fb
+!           go=g
+!           
+!!!!!!!!!!!!!!!!!!!!                     
+!   
+!    l=l+1
+!             
+!           if ( (error <= small).and.(errorx <= tiny) ) then  
+!               write(6,*) 'almost there, countdown =', ct
+!               ct=ct-1
+!           endif
+!  
+!    if (l > lmax) then
+!        write(6,*) 'too many loops, exit do while: all'
+!        exit all  
+!    endif
+!        
+!    enddo all
+!
+!    close(9)
+!    
+!    return
+!    end subroutine sdv6      
+!
+!    subroutine cgv6(x)
+!!  Method of conjugate gradient
+!    use matrixmod
+!    use brut
+!    use v6stepcalc
+!    real(kind=r8) :: x(3,npart),xo(3,npart),xn(3,npart),xrvs(3,npart),xnew(3,npart) &
+!                    ,lambda,t,error,errorx,ptgdiff,g(3,npart),go(3,npart),gn(3,npart) &
+!                     ,f,fo,fn,ta,tb,tc,tx &
+!                    ,ga(3,npart),gb(3,npart),gc(3,npart) &
+!                    ,alpha,p(3,npart),po(3,npart),pn(3,npart) &
+!                    ,step1,fa,fb,fc,step,step0,stepnow
+!    real(kind=r8), allocatable :: trial1(:)
+!    real(kind=r8), parameter :: small=1.0d-10,tiny=1.0d-10,epsilon=1.0d-10 &
+!                               ,w=(3-sqrt(5.0_r8))/2,wg=(sqrt(5.0_r8)-1)/2,phi=(1+sqrt(5.0_r8))/2
+!    integer(kind=i4) :: find1(1),pieces,i,j,k,l,lmax,ct,ia,ib,ic,ig
+!    logical :: abcdone,adone,bdone,cdone
+!
+!    lmax=1000
+!    step0=1.0d-5
+!    step=step0
+!    abcdone=.false.
+!    adone=.true.
+!    bdone=.false.
+!    cdone=.false.
+!    pieces=33
+!    allocate(trial1(pieces))
+!     
+!    ta=0
+!    xo=x
+!
+!    call ftest(xo,fo)
+!    write(6,*) 'f initial =', fo
+!    fa=fo
+!    !write(6,*) 'x initial =', xo 
+!    call gtest(xo,go)
+!    write(6,*) 'g initial =', go 
+!    g=go
+!    
+!    po=go
+!    p=go
+!    
+!    l=0
+!    ct=20
+!    open(unit=9,form='formatted',file='cgv6',position='rewind')
+!    write (9,'(13g15.7)') xo,fo
+!    
+!    all: do while (ct>=0)
+!        
+!!!!!!!!!!!!!!!!!!!!!!!!! 
+!        
+!! for a given x, find the min t.           
+!           ib=0
+!           sub1: do while (.not.bdone)          
+!               t=ta+step 
+!               call ftabc(x,t,p,fn)
+!               if (fn<fa) then
+!                   tb=t
+!                   fb=fn
+!                   bdone=.true.
+!                   stepnow=step
+!               else
+!                   step=step/10  ! do this to ensure ta=0, fa>fb.
+!                   write(6,*) 'try b again',step,fn,fo
+!                   ib=ib+1
+!                   if (ib >= 10) then 
+!                      step=stepnow/(10.0_r8**(ib-10)) ! this 10._r8, the _r8 is important.
+!                      x=xrvs
+!                      call gtest(x,g) 
+!                   endif   
+! 
+!                  ! can add a random monte carlo search here perhaps.
+!                   
+!                   if (ib >= 300) then
+!                       write(6,*) 'it looks like minimal is found and recorded already.'
+!                       exit all
+!                   endif    
+!               endif   
+!           enddo sub1
+!           sub2: do while (.not.cdone)
+!               t=tb+phi*(tb-ta) ! phi is golden number 1.618 
+!               call ftabc(x,t,p,fn)
+!               if (fn>fb) then
+!                   tc=t
+!                   fc=fn
+!                   cdone=.true.
+!                   write(6,*) 'ta,tb,tc: ', ta,tb,tc
+!                   write(6,*) 'fa,fb,fc: ', fa,fb,fc
+!               else
+!                   ta=tb
+!                   tb=t 
+!                   fa=fb
+!                   fb=fn
+!                   write(6,*) 'try c again',fn,fb,fa
+!               endif   
+!           enddo sub2          
+!     ! until here we find ta,tb,tc. next need to fine the t to minimize f
+!           
+!!!!!!!!!  stupid search.              
+!           !step1=(tc-ta)/pieces
+!           !do i=1,pieces
+!           !    t=ta+i*step1
+!           !    call ftabc(x,t,p,fn)
+!           !    trial1(i)=fn
+!           !enddo
+!           !
+!           !find1=minloc(trial1)
+!           !
+!           !t=ta+find1(1)*step1
+!           !xrvs=xo ! save the old x.
+!           !!xrvs=xo+(ta+min(pieces,max(0,find1(1)-1))*step1)*g
+!           !x=x+t*p    
+!           !call ftest(x,fn)
+!           !call gtest(x,g) ! update g.
+!!!!!!!!!!!!!!!!
+!           
+!!!! add complete golden-section search to find x.
+!           
+!           ptgdiff=abs(2*(fb-fo)/(fb+fo))
+!           ig=0
+!           sub3: do while (ptgdiff>epsilon)
+!             fo=fb
+!             if ((tc-tb)>(tb-ta)) then 
+!               tx=ta+wg*(tc-ta) 
+!               call ftabc(x,tx,p,fn)  
+!               if (fn>fb) then
+!                tc=tx
+!                fc=fn
+!               else
+!                   ta=tb
+!                   fa=fb
+!                   tb=tx
+!                   fb=fn
+!                   ptgdiff=abs(2*(fn-fo)/(fn+fo))
+!               endif    
+!             else 
+!               tx=ta+w*(tc-ta) 
+!               call ftabc(x,tx,p,fn) 
+!               if (fn>fb) then
+!                ta=tx
+!                fa=fn
+!               else  
+!                   tc=tb
+!                   fc=fb
+!                   fb=fn
+!                   tb=tx        
+!                   ptgdiff=abs(2*(fn-fo)/(fn+fo))      
+!               endif                         
+!             endif 
+!             ig=ig+1
+!             !write(6,*) 'ig=',ig
+!             !write(6,'(8g15.7)') ta,tb,tc,(tb-ta)/(tc-ta),(tc-tb)/(tc-ta),fo,fb,tc-ta
+!             if (ig>100) then
+!                 write(6,*) 'looks like golden-section cannot go further, stop sub3 do loop.',ptgdiff,fn,fo
+!                 exit sub3
+!             endif       
+!           enddo sub3
+!           xrvs=xo
+!           x=x+tb*p  
+!           call ftest(x,fn)
+!           call gtest(x,g) ! update g.
+!           
+!     
+!! new p.
+!           alpha=sum(g(:,:)**2)/sum(go(:,:)**2)
+!           p=g+alpha*po
+!           xn=x
+!           write(6,*) 'fn=', fn
+!           !write(6,*) 'xnew=', xn          
+!           write (9,'(38g15.7)') xn,fn,p,g,alpha
+!           error=abs(fn-fo)
+!           errorx=abs(sum((xn(:,:)-xo(:,:))**2))
+!           write(6,*) 'error,errorx=', error,errorx
+!
+!! update           
+!           fa=fn
+!           bdone=.false.
+!           cdone=.false.           
+!           ta=0           
+!           xo=xn 
+!           fo=fb
+!           go=g
+!           po=p
+!           
+!!!!!!!!!!!!!!!!!!!!                     
+!   
+!    l=l+1 
+!           if (mod(l,size(x)).eq.0) then  ! reset. this is important for cg.
+!               p=g
+!               po=g  
+!               write(6,*) 'reset',l
+!           endif
+!           
+!           
+!           if ( (error <= small).and.(errorx <= tiny) ) then  
+!               write(6,*) 'almost there, countdown =', ct
+!               ct=ct-1
+!           endif
+!  
+!    if (l > lmax) then
+!        write(6,*) 'too many loops, exit do while: all'
+!        exit all  
+!    endif
+!        
+!    enddo all
+!
+!    close(9)
+!    
+!    return
+!    end subroutine cgv6  
+!!!!!!!!!!!! this part is just to check m6matrix end !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!      
+
+    
+    !subroutine ftabc(xin,tin,gin,f)
+    !real(kind=r8) :: xin(3,npart),xnew(3,npart),f,gin(3,npart),tin
+    !xnew=xin+tin*gin
+    !call ftest(xnew,f)
+    !return
+    !end subroutine ftabc    
+    !
+    !subroutine ftest(xin,f)
+    !use v6stepcalc 
+    !real(kind=r8) :: xin(3,npart),f,vijeigval(nbasis)
+    !complex(kind=r8) :: vij(nbasis,nbasis),vijeigvec(nbasis,nbasis)
+    !call v6mat(xin,vij,vijeigvec,vijeigval)
+    !f=vijeigval(1)
+    !return
+    !end subroutine ftest
+    !
+    !subroutine gtest(xin,g) ! g=-gradiant
+    !use v6stepcalc
+    !real(kind=r8) :: g(3,npart)  
+    !real(kind=r8) :: dx=0.001_r8
+    !real(kind=r8) :: xin(3,npart),f,vijeigval(nbasis),gp,g0,xnew(3,npart)
+    !complex(kind=r8) :: vij(nbasis,nbasis),vijeigvec(nbasis,nbasis)
+    !integer(kind=i4) :: i,j,k
+    !call v6mat(xin,vij,vijeigvec,vijeigval)
+    !g0=vijeigval(1)    
+    !do i=1,npart 
+    !    do j=1,3
+    !        xnew=xin
+    !        xnew(j,i)=xin(j,i)+dx
+    !        call v6mat(xnew,vij,vijeigvec,vijeigval)
+    !        gp=vijeigval(1)
+    !        g(j,i)=-(gp-g0)/dx
+    !    enddo
     !enddo
-    
- 
-! matmul
-    
-    elambdadt=0
-    do i=1,nbasis
-       elambdadt(i,i)=exp(-dt*vijeigval(i))
-    enddo
-   
-    evijdt=matmul(vijeigvec,matmul(elambdadt,conjg(transpose(vijeigvec))))
-  
-    evijtt=0
-    do i=1,nbasis
-       evijtt(i,i)=1 
-    enddo 
-    do i=1,nchorizo    
-        evijtt=matmul(evijtt,evijdt)   
-    enddo
-
-    cwtbegin1t(1,:)=cwtbegin1(:)
-    cwtend1t(:,1)=cwtend1(:)
-    psi2a=matmul(conjg(cwtbegin1t),matmul(evijtt,cwtend1t))
-     
-! regular
-    
-    do j=1,nbasis
-        do i=1,nbasis
-           evijdt1(i,j)=sum(vijeigvec(i,:)*exp(-dt*vijeigval(:))*conjg(vijeigvec(j,:)))       
-        enddo  
-    enddo
-    
-    CALL PRINT_MATRIX( 'evdt', nbasis, nbasis, evijdt, nbasis ) 
-    call PRINT_MATRIX( 'evdt1', nbasis, nbasis, evijdt1, nbasis ) 
-      
-    evijtt1=0
-    do i=1,nbasis
-       evijtt1(i,i)=1 
-    enddo     
-    do i=1,nchorizo    
-        evijtt1=matmul(evijtt1,evijdt1)   
-    enddo   
-    
-    CALL PRINT_MATRIX( 'evtt', nbasis, nbasis, evijtt, nbasis ) 
-    call PRINT_MATRIX( 'evtt1', nbasis, nbasis, evijtt1, nbasis )     
-    
-    c1=matmul(vijeigvec,conjg(transpose(vijeigvec)))
-    CALL PRINT_MATRIX( 'nnh', nbasis, nbasis, c1, nbasis ) ! eigenvec*eigenvec^dagger=1
-    write(6,*) 'c1=', sum(c1)
-    
-    return
-    end subroutine checkv6mat 
-
-    subroutine sdv6(x)
-!  Method of steepest descent
-    use matrixmod
-    use brut
-    use v6stepcalc
-    real(kind=r8) :: x(3,npart),xo(3,npart),xn(3,npart),xrvs(3,npart) &
-                    ,lambda,t,error,errorx,g(3,npart),go(3,npart),gn(3,npart),f,fo,fn,ta,tb,tc &
-                    ,ga(3,npart),gb(3,npart),gc(3,npart) &
-                    ,step1,fa,fb,fc,step,step0,stepnow
-    real(kind=r8), allocatable :: trial1(:)
-    real(kind=r8), parameter :: small=1.0d-10,tiny=1.0d-10,epsilon=1.0d-8 &
-                               ,w=(3-sqrt(5.0_r8))/2,phi=(1+sqrt(5.0_r8))/2
-    integer(kind=i4) :: find1(1),pieces,i,j,k,l,lmax,ct,ia,ib,ic
-    logical :: abcdone,adone,bdone,cdone
-    
-    lmax=1000
-    step0=1.0d-5
-    step=step0
-    abcdone=.false.
-    adone=.true.
-    bdone=.false.
-    cdone=.false.
-    pieces=33
-    allocate(trial1(pieces))
-     
-    ta=0
-    xo=x
-
-    call ftest(xo,fo)
-    write(6,*) 'f initial =', fo
-    fa=fo
-    !write(6,*) 'x initial =', xo 
-    call gtest(xo,go)
-    write(6,*) 'g initial =', go 
-    g=go
-    
-    l=0
-    ct=20
-    open(unit=9,form='formatted',file='sdv6',position='rewind')
-    write (9,'(13g15.7)') xo,fo
-    
-    all: do while (ct>=0)
-        
-!!!!!!!!!!!!!!!!!!!!!!!! 
-        
-! for a given x, find the min t.           
-           ib=0
-           sub1: do while (.not.bdone)          
-               t=ta+step 
-               call ftabc(x,t,g,fn)
-               if (fn<fa) then
-                   tb=t
-                   fb=fn
-                   bdone=.true.
-                   stepnow=step
-               else
-                   step=step/10  ! do this to ensure ta=0, fa>fb.
-                   write(6,*) 'try b again',step,fn,fo
-                   ib=ib+1
-                   if (ib >= 10) then 
-                      step=stepnow/(10.0_r8**(ib-10)) ! this 10._r8, the _r8 is important.
-                      x=xrvs
-                      call gtest(x,g) 
-                   endif   
- 
-                  ! can add a random monte carlo search here perhaps.
-                   
-                   if (ib >= 300) then
-                       write(6,*) 'it looks like minimal is found and recorded already.'
-                       exit all
-                   endif    
-               endif   
-           enddo sub1
-           sub2: do while (.not.cdone)
-               t=tb+phi*(tb-ta) 
-               call ftabc(x,t,g,fn)
-               if (fn>fb) then
-                   tc=t
-                   fc=fn
-                   cdone=.true.
-                   write(6,*) 'ta,tb,tc: ', ta,tb,tc
-                   write(6,*) 'fa,fb,fc: ', fa,fb,fc
-               else
-                   ta=tb
-                   tb=t 
-                   fa=fb
-                   fb=fn
-                   write(6,*) 'try c again',fn,fb,fa
-               endif   
-           enddo sub2          
-     ! until here we find ta,tb,tc. next need to fine the t to minimize f
-                
-           step1=(tc-ta)/pieces
-           do i=1,pieces
-               t=ta+i*step1
-               call ftabc(x,t,g,fn)
-               trial1(i)=fn
-           enddo
-           
-           find1=minloc(trial1)
-           
-           t=ta+find1(1)*step1
-           xrvs=xo ! save the old x.
-           !xrvs=xo+(ta+min(pieces,max(0,find1(1)-1))*step1)*g
-           x=x+t*g   
-  
-           call ftest(x,fn)
-           xn=x
-           write(6,*) 'fn=', fn
-           !write(6,*) 'xnew=', xn          
-           call gtest(x,g) ! update g.
-           write (9,'(25g15.7)') xn,fn,g
-           error=abs(fn-fo)
-           errorx=abs(sum((xn(:,:)-xo(:,:))**2))
-           write(6,*) 'error,errorx=', error,errorx
-
-! update           
-           fa=fn
-           bdone=.false.
-           cdone=.false.           
-           ta=0           
-           xo=xn 
-           fo=fb
-           go=g
-           
-!!!!!!!!!!!!!!!!!!!                     
-   
-    l=l+1
-             
-           if ( (error <= small).and.(errorx <= tiny) ) then  
-               write(6,*) 'almost there, countdown =', ct
-               ct=ct-1
-           endif
-  
-    if (l > lmax) then
-        write(6,*) 'too many loops, exit do while: all'
-        exit all  
-    endif
-        
-    enddo all
-
-    close(9)
-    
-    return
-    end subroutine sdv6      
-
-    subroutine cgv6(x)
-!  Method of conjugate gradient
-    use matrixmod
-    use brut
-    use v6stepcalc
-    real(kind=r8) :: x(3,npart),xo(3,npart),xn(3,npart),xrvs(3,npart),xnew(3,npart) &
-                    ,lambda,t,error,errorx,ptgdiff,g(3,npart),go(3,npart),gn(3,npart) &
-                     ,f,fo,fn,ta,tb,tc,tx &
-                    ,ga(3,npart),gb(3,npart),gc(3,npart) &
-                    ,alpha,p(3,npart),po(3,npart),pn(3,npart) &
-                    ,step1,fa,fb,fc,step,step0,stepnow
-    real(kind=r8), allocatable :: trial1(:)
-    real(kind=r8), parameter :: small=1.0d-10,tiny=1.0d-10,epsilon=1.0d-10 &
-                               ,w=(3-sqrt(5.0_r8))/2,wg=(sqrt(5.0_r8)-1)/2,phi=(1+sqrt(5.0_r8))/2
-    integer(kind=i4) :: find1(1),pieces,i,j,k,l,lmax,ct,ia,ib,ic,ig
-    logical :: abcdone,adone,bdone,cdone
-
-    lmax=1000
-    step0=1.0d-5
-    step=step0
-    abcdone=.false.
-    adone=.true.
-    bdone=.false.
-    cdone=.false.
-    pieces=33
-    allocate(trial1(pieces))
-     
-    ta=0
-    xo=x
-
-    call ftest(xo,fo)
-    write(6,*) 'f initial =', fo
-    fa=fo
-    !write(6,*) 'x initial =', xo 
-    call gtest(xo,go)
-    write(6,*) 'g initial =', go 
-    g=go
-    
-    po=go
-    p=go
-    
-    l=0
-    ct=20
-    open(unit=9,form='formatted',file='cgv6',position='rewind')
-    write (9,'(13g15.7)') xo,fo
-    
-    all: do while (ct>=0)
-        
-!!!!!!!!!!!!!!!!!!!!!!!! 
-        
-! for a given x, find the min t.           
-           ib=0
-           sub1: do while (.not.bdone)          
-               t=ta+step 
-               call ftabc(x,t,p,fn)
-               if (fn<fa) then
-                   tb=t
-                   fb=fn
-                   bdone=.true.
-                   stepnow=step
-               else
-                   step=step/10  ! do this to ensure ta=0, fa>fb.
-                   write(6,*) 'try b again',step,fn,fo
-                   ib=ib+1
-                   if (ib >= 10) then 
-                      step=stepnow/(10.0_r8**(ib-10)) ! this 10._r8, the _r8 is important.
-                      x=xrvs
-                      call gtest(x,g) 
-                   endif   
- 
-                  ! can add a random monte carlo search here perhaps.
-                   
-                   if (ib >= 300) then
-                       write(6,*) 'it looks like minimal is found and recorded already.'
-                       exit all
-                   endif    
-               endif   
-           enddo sub1
-           sub2: do while (.not.cdone)
-               t=tb+phi*(tb-ta) ! phi is golden number 1.618 
-               call ftabc(x,t,p,fn)
-               if (fn>fb) then
-                   tc=t
-                   fc=fn
-                   cdone=.true.
-                   write(6,*) 'ta,tb,tc: ', ta,tb,tc
-                   write(6,*) 'fa,fb,fc: ', fa,fb,fc
-               else
-                   ta=tb
-                   tb=t 
-                   fa=fb
-                   fb=fn
-                   write(6,*) 'try c again',fn,fb,fa
-               endif   
-           enddo sub2          
-     ! until here we find ta,tb,tc. next need to fine the t to minimize f
-           
-!!!!!!!!  stupid search.              
-           !step1=(tc-ta)/pieces
-           !do i=1,pieces
-           !    t=ta+i*step1
-           !    call ftabc(x,t,p,fn)
-           !    trial1(i)=fn
-           !enddo
-           !
-           !find1=minloc(trial1)
-           !
-           !t=ta+find1(1)*step1
-           !xrvs=xo ! save the old x.
-           !!xrvs=xo+(ta+min(pieces,max(0,find1(1)-1))*step1)*g
-           !x=x+t*p    
-           !call ftest(x,fn)
-           !call gtest(x,g) ! update g.
-!!!!!!!!!!!!!!!
-           
-!!! add complete golden-section search to find x.
-           
-           ptgdiff=abs(2*(fb-fo)/(fb+fo))
-           ig=0
-           sub3: do while (ptgdiff>epsilon)
-             fo=fb
-             if ((tc-tb)>(tb-ta)) then 
-               tx=ta+wg*(tc-ta) 
-               call ftabc(x,tx,p,fn)  
-               if (fn>fb) then
-                tc=tx
-                fc=fn
-               else
-                   ta=tb
-                   fa=fb
-                   tb=tx
-                   fb=fn
-                   ptgdiff=abs(2*(fn-fo)/(fn+fo))
-               endif    
-             else 
-               tx=ta+w*(tc-ta) 
-               call ftabc(x,tx,p,fn) 
-               if (fn>fb) then
-                ta=tx
-                fa=fn
-               else  
-                   tc=tb
-                   fc=fb
-                   fb=fn
-                   tb=tx        
-                   ptgdiff=abs(2*(fn-fo)/(fn+fo))      
-               endif                         
-             endif 
-             ig=ig+1
-             !write(6,*) 'ig=',ig
-             !write(6,'(8g15.7)') ta,tb,tc,(tb-ta)/(tc-ta),(tc-tb)/(tc-ta),fo,fb,tc-ta
-             if (ig>100) then
-                 write(6,*) 'looks like golden-section cannot go further, stop sub3 do loop.',ptgdiff,fn,fo
-                 exit sub3
-             endif       
-           enddo sub3
-           xrvs=xo
-           x=x+tb*p  
-           call ftest(x,fn)
-           call gtest(x,g) ! update g.
-           
-     
-! new p.
-           alpha=sum(g(:,:)**2)/sum(go(:,:)**2)
-           p=g+alpha*po
-           xn=x
-           write(6,*) 'fn=', fn
-           !write(6,*) 'xnew=', xn          
-           write (9,'(38g15.7)') xn,fn,p,g,alpha
-           error=abs(fn-fo)
-           errorx=abs(sum((xn(:,:)-xo(:,:))**2))
-           write(6,*) 'error,errorx=', error,errorx
-
-! update           
-           fa=fn
-           bdone=.false.
-           cdone=.false.           
-           ta=0           
-           xo=xn 
-           fo=fb
-           go=g
-           po=p
-           
-!!!!!!!!!!!!!!!!!!!                     
-   
-    l=l+1 
-           if (mod(l,size(x)).eq.0) then  ! reset. this is important for cg.
-               p=g
-               po=g  
-               write(6,*) 'reset',l
-           endif
-           
-           
-           if ( (error <= small).and.(errorx <= tiny) ) then  
-               write(6,*) 'almost there, countdown =', ct
-               ct=ct-1
-           endif
-  
-    if (l > lmax) then
-        write(6,*) 'too many loops, exit do while: all'
-        exit all  
-    endif
-        
-    enddo all
-
-    close(9)
-    
-    return
-    end subroutine cgv6  
-    
-
-    
-    subroutine ftabc(xin,tin,gin,f)
-    real(kind=r8) :: xin(3,npart),xnew(3,npart),f,gin(3,npart),tin
-    xnew=xin+tin*gin
-    call ftest(xnew,f)
-    return
-    end subroutine ftabc    
-    
-    subroutine ftest(xin,f)
-    use v6stepcalc 
-    real(kind=r8) :: xin(3,npart),f,vijeigval(nbasis)
-    complex(kind=r8) :: vij(nbasis,nbasis),vijeigvec(nbasis,nbasis)
-    call v6mat(xin,vij,vijeigvec,vijeigval)
-    f=vijeigval(1)
-    return
-    end subroutine ftest
-    
-    subroutine gtest(xin,g) ! g=-gradiant
-    use v6stepcalc
-    real(kind=r8) :: g(3,npart)  
-    real(kind=r8) :: dx=0.001_r8
-    real(kind=r8) :: xin(3,npart),f,vijeigval(nbasis),gp,g0,xnew(3,npart)
-    complex(kind=r8) :: vij(nbasis,nbasis),vijeigvec(nbasis,nbasis)
-    integer(kind=i4) :: i,j,k
-    call v6mat(xin,vij,vijeigvec,vijeigval)
-    g0=vijeigval(1)    
-    do i=1,npart 
-        do j=1,3
-            xnew=xin
-            xnew(j,i)=xin(j,i)+dx
-            call v6mat(xnew,vij,vijeigvec,vijeigval)
-            gp=vijeigval(1)
-            g(j,i)=-(gp-g0)/dx
-        enddo
-    enddo
-    return
-    end subroutine gtest    
+    !return
+    !end subroutine gtest    
 
     
     
-    subroutine test1229a
-    use brut
-    use v6stepcalc
-    real(kind=r8) :: x(3,npart) ! the configuration for the system
-    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		                ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		                ,cwt1(0:nspin-1,nisospin),cwtgnd(0:nspin-1,nisospin)
-    integer :: ipl(6),jpl(6),ipr(6),jpr(6)
-    call xoutput(x)
-    call getcwtgnd2(cwtgnd)
-    call outputordlr(ipl,jpl,ipr,jpr)
-	
-    call psitprop(x,cwtgnd,cwtnew)
-	
-    call corop(x,ipl,jpl,cwtnew1)
-	
-	
-    !write(6,*) 'cwtnew1-cwtnew=', cwtnew1-cwtnew
+    !subroutine test1229a
+    !use brut
+    !use v6stepcalc
+    !real(kind=r8) :: x(3,npart) ! the configuration for the system
+    !complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
+		  !              ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
+		  !              ,cwt1(0:nspin-1,nisospin),cwtgnd(0:nspin-1,nisospin)
+    !integer :: ipl(6),jpl(6),ipr(6),jpr(6)
+    !call xoutput(x)
+    !call getcwtgnd2(cwtgnd)
+    !call outputordlr(ipl,jpl,ipr,jpr)
+	   !
+    !call psitprop(x,cwtgnd,cwtnew)
+	   !
+    !call corop(x,ipl,jpl,cwtnew1)
+	   !
+	   !
+    !!write(6,*) 'cwtnew1-cwtnew=', cwtnew1-cwtnew
+    !!
+    !!write(6,*) 'ipl=', ipl
+    !!write(6,*) 'jpl=', jpl
+    !!
+    !!write(6,*) 'cwtnew1=', cwtnew1
+    !!write(6,*) 'cwtnew=', cwtnew
+	   !
+    !open(11,FILE='cwtmine.txt',FORM='FORMATTED')
+    !write (11,'(2x,2(f15.7,2x))') cwtnew
+    !close(11)
     !
-    !write(6,*) 'ipl=', ipl
-    !write(6,*) 'jpl=', jpl
-    !
-    !write(6,*) 'cwtnew1=', cwtnew1
-    !write(6,*) 'cwtnew=', cwtnew
-	
-    open(11,FILE='cwtmine.txt',FORM='FORMATTED')
-    write (11,'(2x,2(f15.7,2x))') cwtnew
-    close(11)
-
-    open(11,FILE='cwtSchmidt.txt',FORM='FORMATTED')
-    write (11,'(2x,2(f15.7,2x))') cwtnew1
-    close(11)
-	
-	
-    return
-    end subroutine test1229a        
+    !open(11,FILE='cwtSchmidt.txt',FORM='FORMATTED')
+    !write (11,'(2x,2(f15.7,2x))') cwtnew1
+    !close(11)
+	   !
+	   !
+    !return
+    !end subroutine test1229a        
 
 
     

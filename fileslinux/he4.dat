@@ -1,0 +1,26 @@
+84           # random number seed    84 find bug
+20.735           # hbar^2/2m for He4
+0.002            # dt
+4                # particle number
+2                # proton number
+5000             # table points
+4                # mmax, bisection level 
+16               # reptation move beads number
+.true.          # isite
+0               # neq    10 
+4               # nav   10000
+1000             # nstep
+200              # nstepdecor
+50               # nchorizo
+0.07             # mov1step
+0.025            # mov2step
+0.05            # move3 the shift step 
+1.0              # x0step
+5                # irep, 1 = primitive , 2 = PIMC , 3 metrop diff, 4 VMC ,5 calcuate mode, 6, not decided yet.
+10.              # rangev  potential range
+5.               # one particle density rho range (fm)   
+50   		     # the number of bins for one particle density rho.
+.false. 	     # icorrchk. true=check correlation, false means not. 
+.true.           # EM force switch. true = on. false  = off  
+he4ristra.in     # infile
+he4ristra.out    #outfile

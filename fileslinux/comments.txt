@@ -1,2 +1,4 @@
 the vnn order in the av18pot is different from schmidt order. 
 need to convert them into schmidt order.
+
+he4.dat is the input file

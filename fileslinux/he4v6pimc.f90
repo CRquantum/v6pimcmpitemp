@@ -138,7 +138,7 @@
     call bcast(neq)     !equilibration blocks
     call bcast(nav)     !averaging blocks
     call bcast(nstep)   !steps per block
-    call bcast(nstepdecor)   !calculate energy every this number steps
+    call bcast(nstepdecor)   !calculate energy or x every this number steps to check correlation.
     call bcast(nchorizo) !number of chorizos, better be an even number
     call bcast(mov1step) ! move1 step
     call bcast(mov2step) ! move2 step move all beads at the same time
@@ -386,21 +386,26 @@
     endif  
      
     if ((i.eq.1).and.(myrank().eq.0)) then
-        time1=mpi_wtime()
-	    write (6,'(/,''Time for one block ='',f10.3,'' minutes'')') (time1-time0)/60.
-        write (6,'(/,''Total time estimation ='',f10.3,'' hours'')') dble(nav+neq)*(time1-time0)/3600.
+        time1=mpi_wtime()  
+        write (6,'(/,''Time for one block ='',f10.3,'' minutes'')') (time1-time0)/60.
         write (12,'(/,''Time for one block ='',f10.3,'' minutes'')') (time1-time0)/60.
-        write (12,'(/,''Total time estimation ='',f10.3,'' hours'')') dble(nav+neq)*(time1-time0)/3600.
+        call timedhms((nav+neq)*(time1-time0),day,hour,minute,second)
+        write (6,'(/,''Total time estimation: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+            day,hour,minute,second
+        write (12,'(/,''Total time estimation: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+            day,hour,minute,second                   
     endif
 
     enddo
    
-   
     call barrier
     if (myrank().eq.0) then
     time2=mpi_wtime()
-    write (6,'(/,''Total time ='',f10.3,'' hours'')') (time2-time00)/3600.
-    write (12,'(/,''Total time ='',f10.3,'' hours'')') (time2-time00)/3600.
+    call timedhms((time2-time00),day,hour,minute,second)
+    write (6,'(/,''Total time: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+           day,hour,minute,second
+    write (12,'(/,''Total time: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+           day,hour,minute,second                
     close (12)
     endif
    
@@ -645,11 +650,12 @@
 	  
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!	  
     else
-	write(6,*) 'irep does not make sense. nothing is done.'  
+	write(6,*) 'irep is not defined. Nothing has been done.'  
     endif
    
-    call barrier   
+  
     if (myrank().eq.0) write(6,*) 'The program end normally!'
+    call barrier 
     call done
     end program v6pimc
 	

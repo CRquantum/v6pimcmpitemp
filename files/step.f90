@@ -7,7 +7,7 @@ module step
     type (chorizo), private, allocatable, save :: ristra(:),ristraold(:),ristranew(:),ristranew1(:)
     type (chorizo), private, allocatable, save :: newristra(:),oldristra(:)
     integer(kind=i4), private, save :: npart,nprot,nspin,nisospin,nbasis
-    integer(kind=i4), private, save :: nav,nstep
+    integer(kind=i4), private, save :: nav,neq,nstep,nstepnow,nstepstuck,nblocknow,nblockstuck
     integer(kind=i4), private, save :: nchorizo,nchorizomid,nchorizomod,nrepmax,irep,nstepdecor,nrhobin
     integer(kind=i4), private, save :: mmax,nbisect,nbisecthalf,mmaxhalf,nreparrow,icrephistlast,icrephist
     real(kind=r8), private, save ::  hbar,dt,sigma,driftm,el,repprob
@@ -20,9 +20,10 @@ module step
                                     ,iclr,iclrtot,icrep,icreptot &
                                     ,ibisecthalf,ibisecthalftot,ibisectdouble,ibisectdoubletot &
                                     ,icstdmove2tot,icstdmove2 &
-                                    ,irepstepct,irepstepmonmax
+                                    ,irepstepct,irepstepmonmax 
     integer(kind=i4), private, save, allocatable :: repstepct1(:),repstepct2(:),repstepct1sum(:),repstepct2sum(:) &
-                                                   ,ireparrowhistory(:)
+                                                   ,ireparrowhistory(:) &
+                                                   ,ibisectstuck(:)
     real(kind=r8), private, save, allocatable ::  bisectrate(:),bisectcount(:),bisecttot(:) &
                                                 ,bisectcountl(:),bisecttotl(:) &
                                                 ,bisectcountr(:),bisecttotr(:) &
@@ -46,13 +47,13 @@ contains
     subroutine stepinit(npartin,nchorizoin,hbarin,dtin &
         ,mmaxin,nrepmaxin,irepin,nstepdecorin &
 	    ,x0stepin,mov1stepin,mov2stepin,shftstepin,nrhobinin,icorrchkin &
-	    ,nprotin,navin,nstepin)
+	    ,nprotin,navin,nstepin,neqin)
     use math
     use v6stepcalc
     real(kind=r8) :: hbarin,dtin,elin,dcut,repprobin,ecutin,etrialin &
                     ,x0stepin,mov1stepin,mov2stepin,shftstepin
     integer(kind=i4) :: npartin,nchorizoin,nrepmaxin,irepin,mmaxin,nstepdecorin,nrhobinin,nprotin,ntabin &
-                        ,navin,nstepin
+                        ,navin,nstepin,neqin
     integer(kind=i4) :: i,nristra
     logical :: icorrchkin
     !repprob=repprobin
@@ -131,10 +132,14 @@ contains
    
     nav=navin
     nstep=nstepin
+    neq=neqin
+    
+    allocate(ibisectstuck(nav+neq))
+    ibisectstuck=0 ! check how many times bisection stuck.    
+    
     allocate(ireparrowhistory(0:nav*nstep))
     ireparrowhistory=0
    
-
     return
     end subroutine stepinit
 
@@ -235,8 +240,8 @@ contains
         read(9,'(i10)') nptot
         if (nproc()/=nptot) then  
             if (nproc()<nptot) then
-                write (6,'(''# of cores now < # of cores in infile.'')')   
-                write (12,'(''# of cores now < # of cores in infile.'')')   
+                write (6,'(''# of cores now < # of cores in infile.'',i10, '' vs '',i10  )'),nproc(),nptot   
+                write (12,'(''# of cores now < # of cores in infile.'',i10, '' vs '',i10  )'),nproc(),nptot  
                 do l=0,nproc()-1
                     read (9,'(6i10)') iplall((6*l+1):(6*(l+1))) 
                     read (9,'(6i10)') jplall((6*l+1):(6*(l+1))) 
@@ -245,8 +250,8 @@ contains
                     read (9,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))    
                 enddo                    
             else
-                write (6,'(''# of cores now > # of cores in infile.'')') 
-                write (12,'(''# of cores now > # of cores in infile.'')') 
+                write (6,'(''# of cores now > # of cores in infile.'',i10, '' vs '',i10  )'),nproc(),nptot 
+                write (12,'(''# of cores now > # of cores in infile.'',i10, '' vs '',i10  )'),nproc(),nptot 
                 do l=0,nptot-1
                     read (9,'(6i10)') iplall((6*l+1):(6*(l+1))) 
                     read (9,'(6i10)') jplall((6*l+1):(6*(l+1))) 
@@ -408,7 +413,7 @@ contains
     return
     end subroutine stepchorizoinitlr   
    
-    subroutine stepstd ! for non-constant trial wavefunction
+    subroutine stepstd(nblocknowin) ! for non-constant trial wavefunction
     use estimator
     use estimatorristra
     use wavefunction
@@ -419,7 +424,7 @@ contains
     real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
 	                ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
     real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp
+    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,nblocknowin
     real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
                     ,sum1,sum2
     real(kind=r8) :: psi20,psi2n
@@ -429,6 +434,8 @@ contains
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
    
+    nblocknow=nblocknowin
+    
     icstepstd=icstepstd+1
    
     if (irep.ne.4) then
@@ -546,10 +553,10 @@ contains
 
         ! check	hpsi begin. can check to see if just let rank 0 allocate those arrays works or not.
         if (myrank()==0) then
-        allocate(xall(3*npart*(nchorizo+1)*nproc()))
-        allocate(iplall(6*nproc()),jplall(6*nproc()),iprall(6*nproc()),jprall(6*nproc()))       
-        allocate(icheck1d(0:nproc()-1)) 
-        allocate(psi201d(0:nproc()-1),psi2n1d(0:nproc()-1))
+            allocate(xall(3*npart*(nchorizo+1)*nproc()))
+            allocate(iplall(6*nproc()),jplall(6*nproc()),iprall(6*nproc()),jprall(6*nproc()))       
+            allocate(icheck1d(0:nproc()-1)) 
+            allocate(psi201d(0:nproc()-1),psi2n1d(0:nproc()-1))
         endif
         ! when we do this nproc allocation, better check how much memory it consumes at this moment.   
    
@@ -1078,28 +1085,7 @@ contains
         !endif
     !!! reptation, consider a bisection like reptation.
    
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-     
+
     ! below are mixed move, turn off now.  
     !----------------------------------------------      
         !rn=randn(1)
@@ -1334,6 +1320,7 @@ contains
     endif  
 
     rejectbisectv6improve=reject
+    
     return  
     end subroutine bisectv6b            
    
@@ -4354,13 +4341,13 @@ contains
     ibisect=0
     ibisecttot=0
     icbisecttot=0
-    bisectrate=0.
-    bisectcount=0.
-    bisecttot=0.
-    bisectcountl=0.
-    bisecttotl=0.
-    bisectcountr=0.
-    bisecttotr=0.
+    bisectrate=0
+    bisectcount=0
+    bisecttot=0
+    bisectcountl=0
+    bisecttotl=0
+    bisectcountr=0
+    bisecttotr=0
     ibisectl=0
     ibisecttotl=0
     ibisectr=0
@@ -4377,49 +4364,104 @@ contains
     eloctot=0.
     return
     end subroutine zeroeloc
+    
+    subroutine checkblkstat ! the check stuck config clock.
+    use mympi
+    integer(kind=i4) :: i,j,k,myunit
+    real(kind=r8) :: r(10)
+    character(len=30) :: filename    
+    real(kind=r8) :: xtot(3,npart,0:nchorizo)
+    integer(kind=i4) :: ipl(6),jpl(6),ipr(6),jpr(6)
+      
+    r(1)=dble(icmov1)/icmov1tot
+    r(2)=dble(icstdmove2)/icstdmove2tot
+    r(3)=dble(icshft)/icshfttot
+    r(4)=dble(ic23)/ic23tot
+    r(5)=dble(icn)/icntot
+    r(6)=dble(iclr)/iclrtot
+    r(7)=dble(icrep)/icreptot
+    r(8)=dble(ibisect)/ibisecttot
+    r(9)=dble(ibisectl)/ibisecttotl
+    r(10)=dble(ibisectr)/ibisecttotr
+     
+    if ((ibisect.eq.0).or.(ibisectl.eq.0).or.(ibisectr.eq.0)) then
+        nblockstuck=nblocknow
+        ibisectstuck(nblockstuck)=1        
+        if ( nblockstuck>=1 ) then 
+            if (ibisectstuck(nblockstuck-1).eq.ibisectstuck(nblockstuck)) then
+                call chorizoallout(xtot,ipl,jpl,ipr,jpr) 
+                write(filename,'("myrank",i10,".stuck")') myrank()
+                open(newunit=myunit,form='formatted',file=trim(filename),position='rewind')  
+                    write (myunit,*) 'nsteps really stuck are ',nblockstuck-1,nblockstuck            
+                    write (myunit,'(6i10)') ibisect,ibisecttot,ibisectl,ibisecttotl,ibisectr,ibisecttotr
+                    write (myunit,'(6i10)') ipl
+                    write (myunit,'(6i10)') jpl
+                    write (myunit,'(6i10)') ipr
+                    write (myunit,'(6i10)') jpr
+                    write (myunit,'(3e15.7)') reshape(xtot,(/3*npart*(nchorizo+1)/))      
+                close(myunit)
+                write(6,*) 'stuck configuration, abort! myrank= ', myrank()
+                call abort                         
+            endif       
+        endif
+    endif
+
+    return
+    end subroutine checkblkstat
      
     subroutine showstat
     use mympi
     integer(kind=i4) :: i,j,k
+    real(kind=r8) :: r(10)
       
-   
+    r(1)=dble(icmov1)/icmov1tot
+    r(2)=dble(icstdmove2)/icstdmove2tot
+    r(3)=dble(icshft)/icshfttot
+    r(4)=dble(ic23)/ic23tot
+    r(5)=dble(icn)/icntot
+    r(6)=dble(iclr)/iclrtot
+    r(7)=dble(icrep)/icreptot
+    r(8)=dble(ibisect)/ibisecttot
+    r(9)=dble(ibisectl)/ibisecttotl
+    r(10)=dble(ibisectr)/ibisecttotr
+    
     bisectrate(:)=bisectcount(:)/bisecttot(:)
    
     write (6,'(''dt ='',t40,f10.5)') dt
     write (6,'(''nchorizo ='',t40,i10)') nchorizo 
    
-    write (6,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') dble(icmov1)/dble(icmov1tot),icmov1,icmov1tot,icstdmove1tot
-    write (6,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') dble(icstdmove2)/dble(icstdmove2tot),icstdmove2,icstdmove2tot
-    write (6,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') dble(icshft)/dble(icshfttot),icshft,icshfttot
-    write (6,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') dble(ic23)/dble(ic23tot),ic23,ic23tot
-    write (6,'(''icn ratio ='',t40,f10.5,2(i10))') dble(icn)/dble(icntot),icn,icntot
-    write (6,'(''lr ratio ='',t40,f10.5,2(i10))') dble(iclr)/dble(iclrtot),iclr,iclrtot
-    write (6,'(''reptation ratio ='',t40,f10.5,3(i10))') dble(icrep)/dble(icreptot),icrep,icreptot
-    write (6,'(''ibisect ratio ='',t40,f10.5,3(i10))') dble(ibisect)/dble(ibisecttot),ibisect,ibisecttot,icbisecttot
+    write (6,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') r(1),icmov1,icmov1tot,icstdmove1tot
+    write (6,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') r(2),icstdmove2,icstdmove2tot
+    write (6,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') r(3),icshft,icshfttot
+    write (6,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') r(4),ic23,ic23tot
+    write (6,'(''icn ratio ='',t40,f10.5,2(i10))') r(5),icn,icntot
+    write (6,'(''lr ratio ='',t40,f10.5,2(i10))') r(6),iclr,iclrtot
+    write (6,'(''reptation ratio ='',t40,f10.5,3(i10))') r(7),icrep,icreptot
+    write (6,'(''ibisect ratio ='',t40,f10.5,3(i10))') r(8),ibisect,ibisecttot,icbisecttot
     write (6,'(''bisection level 1 to mmax ratio ='',t40,f10.5)') (bisectrate(k),k=1,mmax)
-    write (6,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') dble(ibisectl)/dble(ibisecttotl),ibisectl,ibisecttotl
+    write (6,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') r(9),ibisectl,ibisecttotl
     !write (6,'(''bisection lend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountl(k)/bisecttotl(k),k=0,mmax-1)
-    write (6,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') dble(ibisectr)/dble(ibisecttotr),ibisectr,ibisecttotr
+    write (6,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') r(10),ibisectr,ibisecttotr
     !write (6,'(''bisection rend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountr(k)/bisecttotr(k),k=0,mmax-1)
     write (6,'(''# of energy samples ='',t40,i10)') ice
     write (6,*) 
    
-   
-    write (12,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') dble(icmov1)/dble(icmov1tot),icmov1,icmov1tot,icstdmove1tot
-    write (12,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') dble(icstdmove2)/dble(icstdmove2tot),icstdmove2,icstdmove2tot
-    write (12,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') dble(icshft)/dble(icshfttot),icshft,icshfttot
-    write (12,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') dble(ic23)/dble(ic23tot),ic23,ic23tot
-    write (12,'(''icn ratio ='',t40,f10.5,2(i10))') dble(icn)/dble(icntot),icn,icntot
-    write (12,'(''lr ratio ='',t40,f10.5,2(i10))') dble(iclr)/dble(iclrtot),iclr,iclrtot
-    write (12,'(''reptation ratio ='',t40,f10.5,3(i10))') dble(icrep)/dble(icreptot)
-    write (12,'(''ibisect ratio ='',t40,f10.5,3(i10))') dble(ibisect)/dble(ibisecttot),ibisect,ibisecttot,icbisecttot
+    write (12,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') r(1),icmov1,icmov1tot,icstdmove1tot
+    write (12,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') r(2),icstdmove2,icstdmove2tot
+    write (12,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') r(3),icshft,icshfttot
+    write (12,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') r(4),ic23,ic23tot
+    write (12,'(''icn ratio ='',t40,f10.5,2(i10))') r(5),icn,icntot
+    write (12,'(''lr ratio ='',t40,f10.5,2(i10))') r(6),iclr,iclrtot
+    write (12,'(''reptation ratio ='',t40,f10.5,3(i10))') r(7),icrep,icreptot
+    write (12,'(''ibisect ratio ='',t40,f10.5,3(i10))') r(8),ibisect,ibisecttot,icbisecttot
     write (12,'(''bisection level 1 to mmax ratio ='',t40,f10.5)') (bisectrate(k),k=1,mmax)
-    write (12,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') dble(ibisectl)/dble(ibisecttotl),ibisectl,ibisecttotl
+    write (12,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') r(9),ibisectl,ibisecttotl
     !write (12,'(''bisection lend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountl(k)/bisecttotl(k),k=0,mmax-1)
-    write (12,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') dble(ibisectr)/dble(ibisecttotr),ibisectr,ibisecttotr
+    write (12,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') r(10),ibisectr,ibisecttotr
     !write (12,'(''bisection rend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountr(k)/bisecttotr(k),k=0,mmax-1)
     write (12,'(''# of energy samples ='',t40,i10)') ice
     write (12,*) 	  
+    
     return
     end subroutine showstat 
    

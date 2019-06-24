@@ -282,7 +282,7 @@
     call v6stepcalcinit(npart,nprot,dt,hbar,ntab,rangev,mmax,nrepmax,iem,irep) 
     call wavefunctioninit(nchorizo,npart,nprot,ntab,hbar,rangev,rangerho,nrhobin,irep)  
     call stepinit(npart,nchorizo,hbar,dt,mmax,nrepmax,irep,nstepdecor,x0step,mov1step,mov2step,shftstep,nrhobin &
-        ,icorrchk,nprot,nav,nstep)
+        ,icorrchk,nprot,nav,nstep,neq)
     call brutinit(npart,nprot,hbar,iem) ! 3 in av18pot.f is v6' . this gives the initial L,R order for psi_T.
     call stepchorizoinit(isite,infile,outfile)   ! call brutinit first.	
 	  	  
@@ -298,12 +298,12 @@
     if (myrank().eq.0) time00=mpi_wtime()
     do i=1,nav+neq  !do blocks
         if (i.eq.neq+1) then 
-        if (myrank().eq.0) then  
-            write (6,'(/,''equilibration done'')')
-		    write (6,'(/,''=================='')')
-		    write (12,'(/,''equilibration done'')')
-		    write (12,'(/,''=================='')')
-        endif
+            if (myrank().eq.0) then  
+                write (6,'(/,''equilibration done'')')
+		        write (6,'(/,''=================='')')
+		        write (12,'(/,''equilibration done'')')
+		        write (12,'(/,''=================='')')
+            endif
             call zerest
             call zerestristra
 		    call zerrhodist
@@ -314,13 +314,14 @@
 	    if ((i.eq.1).and.(myrank().eq.0)) time0=mpi_wtime()
 	    call counterinit
         do j=1,nstep
-		    call stepstd
+		    call stepstd(i)
         enddo
         if (myrank().eq.0) then
         write (6,'(/,''iteration ='',t30,i14)') it
         write (12,'(/,''iteration ='',t30,i14)') it
         call showstat 
         endif
+        call checkblkstat
         call update   !collect block averages
         call updateristra
         answer=resstring()
@@ -449,7 +450,7 @@
     call v6stepcalcinit(npart,nprot,dt,hbar,ntab,rangev,mmax,nrepmax,iem,irep) 
     call wavefunctioninit(nchorizo,npart,nprot,ntab,hbar,rangev,rangerho,nrhobin,irep)  
     call stepinit(npart,nchorizo,hbar,dt,mmax,nrepmax,irep,nstepdecor,x0step,mov1step,mov2step,shftstep &
-        ,nrhobin,icorrchk,nprot,nav,nstep)
+        ,nrhobin,icorrchk,nprot,nav,nstep,neq)
     call brutinit(npart,nprot,hbar,iem) ! 3 in av18pot.f is v6' . this gives the initial L,R order for psi_T.
     !call stepchorizoinit(isite,infile,outfile)   ! call brutinit first.	
     
@@ -491,7 +492,7 @@
     call v6stepcalcinit(npart,nprot,dt,hbar,ntab,rangev,mmax,nrepmax,iem,irep) 
     call wavefunctioninit(nchorizo,npart,nprot,ntab,hbar,rangev,rangerho,nrhobin,irep)  
     call stepinit(npart,nchorizo,hbar,dt,mmax,nrepmax,irep,nstepdecor,x0step,mov1step,mov2step,shftstep &
-        ,nrhobin,icorrchk,nprot,nav,nstep)
+        ,nrhobin,icorrchk,nprot,nav,nstep,neq)
     call brutinit(npart,nprot,hbar,iem) ! 3 in av18pot.f is v6' . this gives the initial L,R order for psi_T.
     call stepchorizoinit(isite,infile,outfile)   ! call brutinit first.	call stepinit first.   
    
@@ -559,7 +560,7 @@
             !call step1
             !write(6,*) 'j=',j
             !write(12,*) 'j=',j
-		    call stepstd
+		    call stepstd(j)
 	    enddo
 	    if (myrank().eq.0) call showstat 
         call update   !collect block averages

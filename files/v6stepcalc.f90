@@ -981,40 +981,7 @@ contains
     call v6propr(xr,it,cwtnew1,cwtnew)  
 	return
     end subroutine v6proplr    	
-    
-   subroutine v6mat(x,vij,vijeigvec,vijeigval)
-   use matrixmod
-   use brut
-   real(kind=r8) :: x(3,npart),x0(3,npart)
-   complex(kind=r8) :: cwt(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin),cwtgnd(0:nspin-1,nisospin)
-   integer(kind=i4) ::  i,j,k,is,iiso 
-   complex(kind=r8) :: vij(nbasis,nbasis),vijeigvec(nbasis,nbasis)
-   real(kind=r8) :: vijeigval(nbasis),t 
-! <i|V6|j> matrix first.  
-!    invcwt 
-! maybe do a x convert. 
-! maybe make it 16 * 16 eigenstates. see if it can be faster.
-    x0=x
-    call xconvert(x0)
-    call getcwtgnd2(cwtgnd) ! no need perhaps.
-    do j=1,nbasis   
-       call v6val1(x0,j,cwtnew) 
-       do i=1,nbasis  
-          vij(i,j)=cwtnew(invspin(i),invispin(i)) ! vij should be hermitian. can check.
-       enddo
-    enddo
-! can check hermitian.
-    
-! diagnalize the hermitian vij
-        
-    call eigen(vij,vijeigvec,vijeigval,nbasis)
- 
-    return
-    end subroutine v6mat   
-    
-    
-    
-    
+       
 	subroutine v6val(x,cwtold,cwtnew)
 	integer(kind=i4) :: i,j,it,index	
 	real(kind=r8) :: x(3,npart) ! the configuration for the system
@@ -1125,7 +1092,35 @@ contains
 	return
 	end subroutine psitprop	
 	
-	
+    !subroutine v6mat(x,vij,vijeigvec,vijeigval)
+    !use matrixmod
+    !use brut
+    !real(kind=r8) :: x(3,npart),x0(3,npart)
+    !complex(kind=r8) :: cwt(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin),cwtgnd(0:nspin-1,nisospin)
+    !integer(kind=i4) ::  i,j,k,is,iiso 
+    !complex(kind=r8) :: vij(nbasis,nbasis),vijeigvec(nbasis,nbasis)
+    !real(kind=r8) :: vijeigval(nbasis),t 
+    !! <i|V6|j> matrix first.  
+    !!    invcwt 
+    !! maybe do a x convert. 
+    !! maybe make it 16 * 16 eigenstates. see if it can be faster.
+    !x0=x
+    !call xconvert(x0)
+    !call getcwtgnd2(cwtgnd) ! no need perhaps.
+    !do j=1,nbasis   
+    !    call v6val1(x0,j,cwtnew) 
+    !    do i=1,nbasis  
+    !        vij(i,j)=cwtnew(invspin(i),invispin(i)) ! vij should be hermitian. can check.
+    !    enddo
+    !enddo
+    !! can check hermitian.
+    !
+    !! diagnalize the hermitian vij
+    !    
+    !call eigen(vij,vijeigvec,vijeigval,nbasis)
+    !
+    !return
+    !end subroutine v6mat 	
 	
 	
 	

@@ -33,7 +33,7 @@ module step
                                                     ,cwtbeginnew(:,:),cwtendnew(:,:),cwtl2rnew(:,:,:),cwtr2lnew(:,:,:) &
                                                     ,cwtbeginnew1(:,:),cwtendnew1(:,:),cwtl2rnew1(:,:,:),cwtr2lnew1(:,:,:)  &
                                                     ,cwtground(:,:)
-    real(kind=r8), private, save, allocatable :: xin(:),corr(:)
+    real(kind=r8), private, save, allocatable :: xin(:),yin(:),corr(:)
     integer(kind=i4), private, allocatable, save :: invspin(:),invispin(:)
     logical, private, save :: icorrchk,isite
     character(len=70), private, save :: infile,outfile
@@ -41,7 +41,7 @@ module step
                             ,ipl(6),jpl(6),ipr(6),jpr(6)	
     logical, private, save :: rejectbisectv6improve,rejectbisectv6improvehalf
     character(len=120), private, save, allocatable :: answer(:)
-    integer(kind=i4), private, save :: ipath,npo,ixtempo    
+    integer(kind=i4), private, save :: ipath,ipathtmp,npo,ixtempo    
 
 contains
     subroutine stepinit(npartin,nchorizoin,hbarin,dtin &
@@ -65,7 +65,8 @@ contains
     irep=irepin
     nreparrow=1 ! initialize reptation direction. 1 is right, -1 is to the left.  
     irepstepct=0
-    ipath=1 ! initialize the number of path as 1.
+    ipath=1 ! initialize the number of path as 1. count the path number for equilibriated path.
+    ipathtmp=1 ! count the path number for unequilibriated path.
     hbar=hbarin
     dt=dtin
     sigma=sqrt(2.0_r8*hbar*dt) ! free particle propagator's sigma.
@@ -104,7 +105,6 @@ contains
     enddo
     !etrial=etrialin*npart
     !ecut=-log(ecutin)/dt
-    allocate(xin(nstepdecor),corr(0:nstepdecor))
     ! spin part:
     nprot=nprotin
     nspin=2**npart ! n=4, it is 16.
@@ -134,11 +134,14 @@ contains
     nstep=nstepin
     neq=neqin
     
+    allocate(xin(nstep),yin(nstep),corr(0:nstep)) ! for correlation check.
     allocate(ibisectstuck(nav+neq))
     ibisectstuck=0 ! check how many times bisection stuck.    
     
-    allocate(ireparrowhistory(0:nav*nstep))
-    ireparrowhistory=0
+    if (nrepmax /= 0) then
+        allocate(ireparrowhistory(0:nav*nstep))
+        ireparrowhistory=0
+    endif
    
     return
     end subroutine stepinit
@@ -159,12 +162,12 @@ contains
     return
     end subroutine chorizoout
 
-    subroutine chorizoallin(xin)
+    subroutine chorizoallin(xallin)
     use wavefunction
     integer(kind=i4) :: i
-    real(kind=r8) :: xin(3,npart,0:nchorizo)
+    real(kind=r8) :: xallin(3,npart,0:nchorizo)
     do i=0,nchorizo
-    ristra(i)%x=xin(:,:,i)
+    ristra(i)%x=xallin(:,:,i)
     enddo
     return
     end subroutine chorizoallin   
@@ -433,6 +436,7 @@ contains
     real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+    integer(kind=i4) :: iounit
    
     nblocknow=nblocknowin
     
@@ -460,11 +464,11 @@ contains
 	    !call stdmove
 	  
        
-        rb=1.0 !0.9
+        rb=0.9
         r1=0.95
         r2=0.967
         r3=0.984
-        r23=1.
+        r23=1
      
         !rb=0.
         !r1=0.
@@ -484,16 +488,11 @@ contains
         if ((rn(1)>r3).and.(rn(1)<=r23))  call stdmove23v6(0,nchorizo)  ! move all + shift     
         endif
      
- 
         !call bisectv6improvew11    
  
     else
-	  
 	    call stdvmcmove2v6 
-	   
     endif
-   
- 
         call stepchorizoinitlr       
       
         !if (mod( icstepstd,(nchorizo/nbisect+2) ).eq.0) call stepchorizoinitlr
@@ -514,26 +513,18 @@ contains
 
     ! check correlation steps
     if (icorrchk) then    
-        if (myrank().eq.0) then   
-            if (icstepstd.le.nstepdecor) then   ! here nstepdecor usually set the same as nstep. 
+        if (myrank().eq.0) then  
+            write(6,*) 'icstepstd=', icstepstd,nstep
+            if (icstepstd <= nstep) then   ! here nstepdecor usually set the same as nstep. 
    	            xtmp=ristra(nchorizomid)%x
-	            !xin(icstepstd)=xtmp(1,1)
 	            call funcrmsq(xtmp,rm,rmsq)
 	            xin(icstepstd)=rm	   
-                !call hpsi(ristra(nchorizomid))
-	            !xin(icstepstd)=ristra(nchorizomid)%elocal     
-                !call hpsi(ristra(0))
-	            !xin(icstepstd)=ristra(0)%elocal 
-	            if (icstepstd.eq.nstepdecor) then
-	            ixd=icstepstd
-	            lmax=nstepdecor
-	            call corrchk(xin,ixd,corr,lmax)   
-	            OPEN(30,FILE='xin.txt',FORM='FORMATTED')
-                WRITE(30,'(2x,2(G15.8,2x))') 'k','x' 
-                do j=1,nstepdecor  
-	            WRITE(30,'(2x,2(G15.8,2x))') j,xin(j)	
-                enddo
-	            close(30)
+                !call hpsi(ristra(0),ristra(nchorizo),vn,vd,vnke,vnpev6,vnpeem,psi20,psi2n,rf,icheck)
+                !yin(icstepstd)=vn
+	            if (icstepstd.eq.nstep) then
+	                ixd=icstepstd
+	                lmax=nstep                   
+                    call corrchk(xin,ixd,corr,lmax)       
                 endif   
             endif
         endif
@@ -580,53 +571,72 @@ contains
             if (sum(icheck1d) /= 0) then
                 open(unit=19,form='formatted',file='bugbeads.out',position='rewind')
                 do l=0,nproc()-1
-                if ( icheck1d(l) /= 0 ) then
-                 write(6,'( ''process= '', i10 , '' psi20 and psi2 error! '' )') l
-                 write (6,'(3e15.7)') psi201d(l),psi2n1d(l),abs((psi201d(l)-psi2n1d(l))/((psi201d(l)+psi2n1d(l))/2.))
-                 write (19,'(i10)') l
-                 write (19,'(3e15.7)') psi201d(l),psi2n1d(l),abs((psi201d(l)-psi2n1d(l))/((psi201d(l)+psi2n1d(l))/2.))
-                 write (19,'(6i10)') iplall((6*l+1):(6*(l+1))) 
-                 write (19,'(6i10)') jplall((6*l+1):(6*(l+1))) 
-                 write (19,'(6i10)') iprall((6*l+1):(6*(l+1))) 
-                 write (19,'(6i10)') jprall((6*l+1):(6*(l+1))) 
-                 write (19,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))               
-                endif    
+                    if ( icheck1d(l) /= 0 ) then
+                     write(6,'( ''process= '', i10 , '' psi20 and psi2 error! '' )') l
+                     write (6,'(3e15.7)') psi201d(l),psi2n1d(l),abs((psi201d(l)-psi2n1d(l))/((psi201d(l)+psi2n1d(l))/2.))
+                     write (19,'(i10)') l
+                     write (19,'(3e15.7)') psi201d(l),psi2n1d(l),abs((psi201d(l)-psi2n1d(l))/((psi201d(l)+psi2n1d(l))/2.))
+                     write (19,'(6i10)') iplall((6*l+1):(6*(l+1))) 
+                     write (19,'(6i10)') jplall((6*l+1):(6*(l+1))) 
+                     write (19,'(6i10)') iprall((6*l+1):(6*(l+1))) 
+                     write (19,'(6i10)') jprall((6*l+1):(6*(l+1))) 
+                     write (19,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))               
+                    endif    
                 enddo 
                 close(19)  
-            write(6,*) 'check hpsi fail! Bug x recorded in outfile! use hpsi to check!'
-            call abort 
-            else
-        ! output all the x.  call it path.out
-            open(unit=19,form='unformatted',file='path.unf',position='append')
-            write(19) ipath
-            do l=0,nproc()-1    
-                write (19) l
-                write (19) iplall((6*l+1):(6*(l+1))) 
-                write (19) jplall((6*l+1):(6*(l+1))) 
-                write (19) iprall((6*l+1):(6*(l+1))) 
-                write (19) jprall((6*l+1):(6*(l+1))) 
-                write (19) xall((ixtemp*l+1):(ixtemp*(l+1)))               
-            enddo 
-            close(19)  
-            open(unit=19,form='formatted',file='pathnumbercounts.txt',position='rewind')
-            write (19,'(3i10)') nproc(),ipath,ixtemp
-            close(19)
-            ipath=ipath+1  
-   
-            open(unit=19,form='formatted',file='reptationMON.txt',position='rewind')
-        ! check reptation number of steps distributions.
-            do i=0,irepstepmonmax
-                write(19,'( i10 , i10, f15.7, i10, f15.7 )') i,repstepct1sum(i),repstepct1sum(i)/sum1 &
-                                                            ,repstepct2sum(i),repstepct2sum(i)/sum2 
-            enddo 
-            close(19)     
-            open(unit=19,form='formatted',file='reparrowhist.txt',position='append')
-        ! check reptation direction history.
-            do i=icrephistlast,icrephist
-                write(19,'( i10,1x,i10 )') i,ireparrowhistory(i)
-            enddo 
-            icrephistlast=icrephist+1
-            close(19) 
+                write(6,*) 'check hpsi fail! Bug x recorded in outfile! use hpsi to check!'
+                call abort 
+            else              
+                if (nblocknow > neq) then             
+                ! output all the x.  call it path.out
+                    open(unit=19,form='unformatted',file='path.unf',position='append')
+                    write(19) ipath
+                    do l=0,nproc()-1    
+                        write (19) l
+                        write (19) iplall((6*l+1):(6*(l+1))) 
+                        write (19) jplall((6*l+1):(6*(l+1))) 
+                        write (19) iprall((6*l+1):(6*(l+1))) 
+                        write (19) jprall((6*l+1):(6*(l+1))) 
+                        write (19) xall((ixtemp*l+1):(ixtemp*(l+1)))               
+                    enddo 
+                    close(19)  
+                    open(unit=19,form='formatted',file='pathnumbercounts.txt',position='rewind')
+                    write (19,'(3i10)') nproc(),ipath,ixtemp
+                    close(19)
+                    ipath=ipath+1              
+                else                
+                    open(unit=19,form='unformatted',file='path0.unf',position='append')
+                    write(19) ipathtmp
+                    do l=0,nproc()-1    
+                        write (19) l
+                        write (19) iplall((6*l+1):(6*(l+1))) 
+                        write (19) jplall((6*l+1):(6*(l+1))) 
+                        write (19) iprall((6*l+1):(6*(l+1))) 
+                        write (19) jprall((6*l+1):(6*(l+1))) 
+                        write (19) xall((ixtemp*l+1):(ixtemp*(l+1)))               
+                    enddo 
+                    close(19)  
+                    open(unit=19,form='formatted',file='path0numbercounts.txt',position='rewind')
+                    write (19,'(3i10)') nproc(),ipathtmp,ixtemp
+                    close(19)
+                    ipathtmp=ipathtmp+1                                             
+                endif         
+                if (nrepmax /= 0) then
+                    open(unit=19,form='formatted',file='reptationMON.txt',position='rewind')
+                ! check reptation number of steps distributions.
+                    do i=0,irepstepmonmax
+                        write(19,'( i10 , i10, f15.7, i10, f15.7 )') i,repstepct1sum(i),repstepct1sum(i)/sum1 &
+                                                                    ,repstepct2sum(i),repstepct2sum(i)/sum2 
+                    enddo 
+                    close(19)     
+                    open(unit=19,form='formatted',file='reparrowhist.txt',position='append')
+                ! check reptation direction history.
+                    do i=icrephistlast,icrephist
+                        write(19,'( i10,1x,i10 )') i,ireparrowhistory(i)
+                    enddo 
+                    icrephistlast=icrephist+1
+                    close(19) 
+                endif               
             endif
             deallocate(xall,iplall,jplall,iprall,jprall,icheck1d,psi201d,psi2n1d)   
         endif
@@ -1077,13 +1087,15 @@ contains
         !endif
           
     !!! reptation        
-        !if (nrepmax == 1) then
-        ! !call reptation1 
-        ! call reptation
-        !else
-        ! call reptation       
-        !endif
-    !!! reptation, consider a bisection like reptation.
+    !    if (nrepmax == 1) then
+    !     !call reptation1 
+    !        call reptation
+    !    else 
+    !        if (nrepmax /= 0) then
+    !            call reptation  
+    !        endif
+    !    endif
+    !!! reptation, consider a bisection-ike reptation.
    
 
     ! below are mixed move, turn off now.  
@@ -4258,49 +4270,42 @@ contains
     !   
    
 
-    subroutine corrchk(xin,ixd,corr,lmax) 
+    subroutine corrchk(x,ixd,corrin,lmax)
+! Interacting Electrons, Ceperley et al, p585. MC in ab initio quantum chemstry, Hammond et al, p59.    
     use wavefunction
     use estimator
     use random
-    integer(kind=i4) :: ixd,lmax,lcorr,icorr,stepdecorr ! lmax <= ixd, usally set ixd=lmax=nstepdecor
+    integer(kind=i4) :: ixd,lmax,lcorr,icorr,stepdecorr,i,j,k! lmax <= ixd, usally set ixd=lmax=nstepdecor
     real(kind=r8) :: xave,xvar,tauintg
-    real(kind=r8), allocatable :: xin(:),corr(:)
-    logical :: findstepdecorr
-    ! nstepdecor usually set the same as nstep. 
-    xave=sum(xin(:))/dble(ixd)
-    xvar=sum(xin(:)**2)/dble(ixd)-xave**2      
+    real(kind=r8) :: x(:),corrin(:),kappa(ixd-1)
+    integer(kind=i4) :: iounit
+    logical :: findstepdecorr 
+    ! nstepdecor usually set the same as nstep when do the correlation check.
+    xave=sum(x(1:ixd))/ixd
+    xvar=sum(x(1:ixd)**2)/ixd-xave**2      
     findstepdecorr=.false.
-    corr=0.
-    tauintg=0.
-    OPEN(31,FILE='correlationcheck.txt',FORM='FORMATTED')
-    WRITE(31,'(2x,5(G15.8,2x))') 'k','corr(k)','tauintg' 
-    do lcorr=0,lmax     
-	    do icorr=1,ixd-lcorr
-		    corr(lcorr)=corr(lcorr)+ (xin(icorr)-xave)*(xin(icorr+lcorr)-xave)
+    corrin=0.
+    kappa=0
+    OPEN(newunit=iounit,FILE='xcorrelationcheck.txt',FORM='FORMATTED')
+    WRITE(iounit,'(2x,5(G15.8,2x))') 'k','corr(k)','kappa' 
+    do lcorr=1,ixd-1 ! k     
+	    do icorr=1,ixd-lcorr ! n
+		    corrin(lcorr)=corrin(lcorr)+ (x(icorr)-xave)*(x(icorr+lcorr)-xave)
 	    enddo
-	    corr(lcorr)=corr(lcorr)/dble(ixd-lcorr)/xvar ! in hand book of MC, they say divide by ixd instead of (ixd-lcorr). 
-	    tauintg=tauintg+corr(lcorr)
-    WRITE(31,'(2x,20(G15.8,2x))') lcorr,corr(lcorr),tauintg
-    if (corr(lcorr).lt.exp(-1.)) then
-	    stepdecorr=int(dble(lcorr)/50.)*50+50 ! can be other number, I choose 50.
-    WRITE(6,'(2x,20(G15.8,2x))') '--------','stepdecorr=', stepdecorr,'--------' 		
-    WRITE(31,'(2x,20(G15.8,2x))') '--------','stepdecorr=', stepdecorr,'--------' 
-	    findstepdecorr=.true.
-	    exit
-    else
-    endif 
-    enddo  
-    if (findstepdecorr) then
-    else
-	    WRITE(6,'(2x,20(G15.8,2x))') 'did not find stepdecorr within nstepdecor! Increase	nstepdecor!'
-	    WRITE(31,'(2x,20(G15.8,2x))') 'did not find stepdecorr within nstepdecor! Increase nstepdecor!'
-    endif
-    close(31)
+	    corrin(lcorr)=corrin(lcorr)/(ixd-lcorr)/xvar 
+        kappa(lcorr)=1+2*sum(corrin(1:lcorr))
+        WRITE(iounit,'(2x,20(G15.8,2x))') lcorr,corrin(lcorr),kappa(lcorr)
+    enddo    
+    close(iounit) 
+	OPEN(newunit=iounit,FILE='xcorrchk.txt',FORM='FORMATTED')
+    WRITE(iounit,'(2x,2(G15.8,2x))') 'k','x' 
+    do j=1,lmax 
+	    WRITE(iounit,'(2x,2(G15.8,2x))') j,x(j)	
+    enddo
+	close(iounit)
     return  
     end subroutine corrchk       
    
-
-     
     subroutine counterinitVMC
     ic0=0
     ic0tot=0
@@ -4387,12 +4392,12 @@ contains
     if ((ibisect.eq.0).or.(ibisectl.eq.0).or.(ibisectr.eq.0)) then
         nblockstuck=nblocknow
         ibisectstuck(nblockstuck)=1        
-        if ( nblockstuck>=1 ) then 
-            if (ibisectstuck(nblockstuck-1).eq.ibisectstuck(nblockstuck)) then
+        if ( nblockstuck >= 5 ) then 
+            if (sum(ibisectstuck(nblockstuck-4:nblockstuck)).eq.5) then
                 call chorizoallout(xtot,ipl,jpl,ipr,jpr) 
                 write(filename,'("myrank",i10,".stuck")') myrank()
                 open(newunit=myunit,form='formatted',file=trim(filename),position='rewind')  
-                    write (myunit,*) 'nsteps really stuck are ',nblockstuck-1,nblockstuck            
+                    write (myunit,*) 'nsteps really stuck are ',nblockstuck            
                     write (myunit,'(6i10)') ibisect,ibisecttot,ibisectl,ibisecttotl,ibisectr,ibisecttotr
                     write (myunit,'(6i10)') ipl
                     write (myunit,'(6i10)') jpl
@@ -4955,6 +4960,8 @@ contains
         
         open(unit=19,form='unformatted',file='path.unf',status='replace',position='rewind') 
         close(19)
+        open(unit=19,form='unformatted',file='path0.unf',status='replace',position='rewind') 
+        close(19)
         open(unit=19,form='formatted',file='reparrowhist.txt',status='replace',position='rewind')
         close(19)
         open(unit=11,form='formatted',file='values.txt',status='replace',position='rewind')
@@ -5134,7 +5141,7 @@ contains
                         call recv(jpro,0,4)
                         call recv(x0tot1d,0,5)                  
                     endif            
-                    ! calculate                          
+                    ! calculate 
                     x0tot=reshape(x0tot1d,shape(x0tot)) 
                     call computecore(x0tot,iplo,jplo,ipro,jpro,0,np-1)    
                     ! update                       

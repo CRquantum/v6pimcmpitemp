@@ -7,7 +7,7 @@ module step
     type (chorizo), private, allocatable, save :: ristra(:),ristraold(:),ristranew(:),ristranew1(:)
     type (chorizo), private, allocatable, save :: newristra(:),oldristra(:)
     integer(kind=i4), private, save :: npart,nprot,nspin,nisospin,nbasis
-    integer(kind=i4), private, save :: nav,nstep
+    integer(kind=i4), private, save :: nav,neq,nstep,nstepnow,nstepstuck,nblocknow,nblockstuck
     integer(kind=i4), private, save :: nchorizo,nchorizomid,nchorizomod,nrepmax,irep,nstepdecor,nrhobin
     integer(kind=i4), private, save :: mmax,nbisect,nbisecthalf,mmaxhalf,nreparrow,icrephistlast,icrephist
     real(kind=r8), private, save ::  hbar,dt,sigma,driftm,el,repprob
@@ -20,9 +20,10 @@ module step
                                     ,iclr,iclrtot,icrep,icreptot &
                                     ,ibisecthalf,ibisecthalftot,ibisectdouble,ibisectdoubletot &
                                     ,icstdmove2tot,icstdmove2 &
-                                    ,irepstepct,irepstepmonmax
+                                    ,irepstepct,irepstepmonmax 
     integer(kind=i4), private, save, allocatable :: repstepct1(:),repstepct2(:),repstepct1sum(:),repstepct2sum(:) &
-                                                   ,ireparrowhistory(:)
+                                                   ,ireparrowhistory(:) &
+                                                   ,ibisectstuck(:)
     real(kind=r8), private, save, allocatable ::  bisectrate(:),bisectcount(:),bisecttot(:) &
                                                 ,bisectcountl(:),bisecttotl(:) &
                                                 ,bisectcountr(:),bisecttotr(:) &
@@ -32,7 +33,7 @@ module step
                                                     ,cwtbeginnew(:,:),cwtendnew(:,:),cwtl2rnew(:,:,:),cwtr2lnew(:,:,:) &
                                                     ,cwtbeginnew1(:,:),cwtendnew1(:,:),cwtl2rnew1(:,:,:),cwtr2lnew1(:,:,:)  &
                                                     ,cwtground(:,:)
-    real(kind=r8), private, save, allocatable :: xin(:),corr(:)
+    real(kind=r8), private, save, allocatable :: xin(:),yin(:),corr(:)
     integer(kind=i4), private, allocatable, save :: invspin(:),invispin(:)
     logical, private, save :: icorrchk,isite
     character(len=70), private, save :: infile,outfile
@@ -40,19 +41,19 @@ module step
                             ,ipl(6),jpl(6),ipr(6),jpr(6)	
     logical, private, save :: rejectbisectv6improve,rejectbisectv6improvehalf
     character(len=120), private, save, allocatable :: answer(:)
-    integer(kind=i4), private, save :: ipath,npo,ixtempo    
+    integer(kind=i4), private, save :: ipath,ipathtmp,npo,ixtempo    
 
 contains
     subroutine stepinit(npartin,nchorizoin,hbarin,dtin &
         ,mmaxin,nrepmaxin,irepin,nstepdecorin &
 	    ,x0stepin,mov1stepin,mov2stepin,shftstepin,nrhobinin,icorrchkin &
-	    ,nprotin,navin,nstepin)
+	    ,nprotin,navin,nstepin,neqin)
     use math
     use v6stepcalc
     real(kind=r8) :: hbarin,dtin,elin,dcut,repprobin,ecutin,etrialin &
                     ,x0stepin,mov1stepin,mov2stepin,shftstepin
     integer(kind=i4) :: npartin,nchorizoin,nrepmaxin,irepin,mmaxin,nstepdecorin,nrhobinin,nprotin,ntabin &
-                        ,navin,nstepin
+                        ,navin,nstepin,neqin
     integer(kind=i4) :: i,nristra
     logical :: icorrchkin
     !repprob=repprobin
@@ -64,7 +65,8 @@ contains
     irep=irepin
     nreparrow=1 ! initialize reptation direction. 1 is right, -1 is to the left.  
     irepstepct=0
-    ipath=1 ! initialize the number of path as 1.
+    ipath=1 ! initialize the number of path as 1. count the path number for equilibriated path.
+    ipathtmp=1 ! count the path number for unequilibriated path.
     hbar=hbarin
     dt=dtin
     sigma=sqrt(2.0_r8*hbar*dt) ! free particle propagator's sigma.
@@ -103,7 +105,6 @@ contains
     enddo
     !etrial=etrialin*npart
     !ecut=-log(ecutin)/dt
-    allocate(xin(nstepdecor),corr(0:nstepdecor))
     ! spin part:
     nprot=nprotin
     nspin=2**npart ! n=4, it is 16.
@@ -131,10 +132,17 @@ contains
    
     nav=navin
     nstep=nstepin
-    allocate(ireparrowhistory(0:nav*nstep))
-    ireparrowhistory=0
+    neq=neqin
+    
+    allocate(xin(nstep),yin(nstep),corr(0:nstep)) ! for correlation check.
+    allocate(ibisectstuck(nav+neq))
+    ibisectstuck=0 ! check how many times bisection stuck.    
+    
+    if (nrepmax /= 0) then
+        allocate(ireparrowhistory(0:nav*nstep))
+        ireparrowhistory=0
+    endif
    
-
     return
     end subroutine stepinit
 
@@ -154,12 +162,12 @@ contains
     return
     end subroutine chorizoout
 
-    subroutine chorizoallin(xin)
+    subroutine chorizoallin(xallin)
     use wavefunction
     integer(kind=i4) :: i
-    real(kind=r8) :: xin(3,npart,0:nchorizo)
+    real(kind=r8) :: xallin(3,npart,0:nchorizo)
     do i=0,nchorizo
-    ristra(i)%x=xin(:,:,i)
+    ristra(i)%x=xallin(:,:,i)
     enddo
     return
     end subroutine chorizoallin   
@@ -235,8 +243,8 @@ contains
         read(9,'(i10)') nptot
         if (nproc()/=nptot) then  
             if (nproc()<nptot) then
-                write (6,'(''# of cores now < # of cores in infile.'')')   
-                write (12,'(''# of cores now < # of cores in infile.'')')   
+                write (6,'(''# of cores now < # of cores in infile.'',i10, '' vs '',i10  )'),nproc(),nptot   
+                write (12,'(''# of cores now < # of cores in infile.'',i10, '' vs '',i10  )'),nproc(),nptot  
                 do l=0,nproc()-1
                     read (9,'(6i10)') iplall((6*l+1):(6*(l+1))) 
                     read (9,'(6i10)') jplall((6*l+1):(6*(l+1))) 
@@ -245,8 +253,8 @@ contains
                     read (9,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))    
                 enddo                    
             else
-                write (6,'(''# of cores now > # of cores in infile.'')') 
-                write (12,'(''# of cores now > # of cores in infile.'')') 
+                write (6,'(''# of cores now > # of cores in infile.'',i10, '' vs '',i10  )'),nproc(),nptot 
+                write (12,'(''# of cores now > # of cores in infile.'',i10, '' vs '',i10  )'),nproc(),nptot 
                 do l=0,nptot-1
                     read (9,'(6i10)') iplall((6*l+1):(6*(l+1))) 
                     read (9,'(6i10)') jplall((6*l+1):(6*(l+1))) 
@@ -408,7 +416,7 @@ contains
     return
     end subroutine stepchorizoinitlr   
    
-    subroutine stepstd ! for non-constant trial wavefunction
+    subroutine stepstd(nblocknowin) ! for non-constant trial wavefunction
     use estimator
     use estimatorristra
     use wavefunction
@@ -419,7 +427,7 @@ contains
     real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
 	                ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
     real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp
+    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,nblocknowin
     real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
                     ,sum1,sum2
     real(kind=r8) :: psi20,psi2n
@@ -428,7 +436,10 @@ contains
     real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+    integer(kind=i4) :: iounit
    
+    nblocknow=nblocknowin
+    
     icstepstd=icstepstd+1
    
     if (irep.ne.4) then
@@ -453,11 +464,11 @@ contains
 	    !call stdmove
 	  
        
-        rb=1.0 !0.9
+        rb=0.9
         r1=0.95
         r2=0.967
         r3=0.984
-        r23=1.
+        r23=1
      
         !rb=0.
         !r1=0.
@@ -477,16 +488,11 @@ contains
         if ((rn(1)>r3).and.(rn(1)<=r23))  call stdmove23v6(0,nchorizo)  ! move all + shift     
         endif
      
- 
         !call bisectv6improvew11    
  
     else
-	  
 	    call stdvmcmove2v6 
-	   
     endif
-   
- 
         call stepchorizoinitlr       
       
         !if (mod( icstepstd,(nchorizo/nbisect+2) ).eq.0) call stepchorizoinitlr
@@ -507,26 +513,33 @@ contains
 
     ! check correlation steps
     if (icorrchk) then    
-        if (myrank().eq.0) then   
-            if (icstepstd.le.nstepdecor) then   ! here nstepdecor usually set the same as nstep. 
+        if (myrank().eq.0) then  
+            write(6,*) 'icstepstd=', icstepstd,nstep
+            if (icstepstd <= nstep) then   ! here nstepdecor usually set the same as nstep. 
    	            xtmp=ristra(nchorizomid)%x
-	            !xin(icstepstd)=xtmp(1,1)
 	            call funcrmsq(xtmp,rm,rmsq)
 	            xin(icstepstd)=rm	   
-                !call hpsi(ristra(nchorizomid))
-	            !xin(icstepstd)=ristra(nchorizomid)%elocal     
-                !call hpsi(ristra(0))
-	            !xin(icstepstd)=ristra(0)%elocal 
-	            if (icstepstd.eq.nstepdecor) then
-	            ixd=icstepstd
-	            lmax=nstepdecor
-	            call corrchk(xin,ixd,corr,lmax)   
-	            OPEN(30,FILE='xin.txt',FORM='FORMATTED')
-                WRITE(30,'(2x,2(G15.8,2x))') 'k','x' 
-                do j=1,nstepdecor  
-	            WRITE(30,'(2x,2(G15.8,2x))') j,xin(j)	
-                enddo
-	            close(30)
+                !call hpsi(ristra(0),ristra(nchorizo),vn,vd,vnke,vnpev6,vnpeem,psi20,psi2n,rf,icheck)
+                !yin(icstepstd)=vn
+	            if (icstepstd.eq.nstep) then
+	                ixd=icstepstd
+	                lmax=nstep                   
+                    call corrchk(xin,ixd,corr,lmax)   
+	                OPEN(newunit=iounit,FILE='xin.txt',FORM='FORMATTED')
+                    WRITE(iounit,'(2x,2(G15.8,2x))') 'k','x' 
+                    do j=1,nstep 
+	                   WRITE(iounit,'(2x,2(G15.8,2x))') j,xin(j)	
+                    enddo
+	                close(iounit)
+                    
+                 !   call corrchk(yin,ixd,corr,lmax)   
+	                !OPEN(newunit=iounit,FILE='xin.txt',FORM='FORMATTED')
+                 !   WRITE(iounit,'(2x,2(G15.8,2x))') 'k','vn' 
+                 !   do j=1,nstep 
+	                !   WRITE(iounit,'(2x,2(G15.8,2x))') j,yin(j)	
+                 !   enddo
+	                !close(iounit)                    
+                        
                 endif   
             endif
         endif
@@ -546,10 +559,10 @@ contains
 
         ! check	hpsi begin. can check to see if just let rank 0 allocate those arrays works or not.
         if (myrank()==0) then
-        allocate(xall(3*npart*(nchorizo+1)*nproc()))
-        allocate(iplall(6*nproc()),jplall(6*nproc()),iprall(6*nproc()),jprall(6*nproc()))       
-        allocate(icheck1d(0:nproc()-1)) 
-        allocate(psi201d(0:nproc()-1),psi2n1d(0:nproc()-1))
+            allocate(xall(3*npart*(nchorizo+1)*nproc()))
+            allocate(iplall(6*nproc()),jplall(6*nproc()),iprall(6*nproc()),jprall(6*nproc()))       
+            allocate(icheck1d(0:nproc()-1)) 
+            allocate(psi201d(0:nproc()-1),psi2n1d(0:nproc()-1))
         endif
         ! when we do this nproc allocation, better check how much memory it consumes at this moment.   
    
@@ -573,53 +586,72 @@ contains
             if (sum(icheck1d) /= 0) then
                 open(unit=19,form='formatted',file='bugbeads.out',position='rewind')
                 do l=0,nproc()-1
-                if ( icheck1d(l) /= 0 ) then
-                 write(6,'( ''process= '', i10 , '' psi20 and psi2 error! '' )') l
-                 write (6,'(3e15.7)') psi201d(l),psi2n1d(l),abs((psi201d(l)-psi2n1d(l))/((psi201d(l)+psi2n1d(l))/2.))
-                 write (19,'(i10)') l
-                 write (19,'(3e15.7)') psi201d(l),psi2n1d(l),abs((psi201d(l)-psi2n1d(l))/((psi201d(l)+psi2n1d(l))/2.))
-                 write (19,'(6i10)') iplall((6*l+1):(6*(l+1))) 
-                 write (19,'(6i10)') jplall((6*l+1):(6*(l+1))) 
-                 write (19,'(6i10)') iprall((6*l+1):(6*(l+1))) 
-                 write (19,'(6i10)') jprall((6*l+1):(6*(l+1))) 
-                 write (19,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))               
-                endif    
+                    if ( icheck1d(l) /= 0 ) then
+                     write(6,'( ''process= '', i10 , '' psi20 and psi2 error! '' )') l
+                     write (6,'(3e15.7)') psi201d(l),psi2n1d(l),abs((psi201d(l)-psi2n1d(l))/((psi201d(l)+psi2n1d(l))/2.))
+                     write (19,'(i10)') l
+                     write (19,'(3e15.7)') psi201d(l),psi2n1d(l),abs((psi201d(l)-psi2n1d(l))/((psi201d(l)+psi2n1d(l))/2.))
+                     write (19,'(6i10)') iplall((6*l+1):(6*(l+1))) 
+                     write (19,'(6i10)') jplall((6*l+1):(6*(l+1))) 
+                     write (19,'(6i10)') iprall((6*l+1):(6*(l+1))) 
+                     write (19,'(6i10)') jprall((6*l+1):(6*(l+1))) 
+                     write (19,'(3e15.7)') xall((ixtemp*l+1):(ixtemp*(l+1)))               
+                    endif    
                 enddo 
                 close(19)  
-            write(6,*) 'check hpsi fail! Bug x recorded in outfile! use hpsi to check!'
-            call abort 
-            else
-        ! output all the x.  call it path.out
-            open(unit=19,form='unformatted',file='path.unf',position='append')
-            write(19) ipath
-            do l=0,nproc()-1    
-                write (19) l
-                write (19) iplall((6*l+1):(6*(l+1))) 
-                write (19) jplall((6*l+1):(6*(l+1))) 
-                write (19) iprall((6*l+1):(6*(l+1))) 
-                write (19) jprall((6*l+1):(6*(l+1))) 
-                write (19) xall((ixtemp*l+1):(ixtemp*(l+1)))               
-            enddo 
-            close(19)  
-            open(unit=19,form='formatted',file='pathnumbercounts.txt',position='rewind')
-            write (19,'(3i10)') nproc(),ipath,ixtemp
-            close(19)
-            ipath=ipath+1  
-   
-            open(unit=19,form='formatted',file='reptationMON.txt',position='rewind')
-        ! check reptation number of steps distributions.
-            do i=0,irepstepmonmax
-                write(19,'( i10 , i10, f15.7, i10, f15.7 )') i,repstepct1sum(i),repstepct1sum(i)/sum1 &
-                                                            ,repstepct2sum(i),repstepct2sum(i)/sum2 
-            enddo 
-            close(19)     
-            open(unit=19,form='formatted',file='reparrowhist.txt',position='append')
-        ! check reptation direction history.
-            do i=icrephistlast,icrephist
-                write(19,'( i10,1x,i10 )') i,ireparrowhistory(i)
-            enddo 
-            icrephistlast=icrephist+1
-            close(19) 
+                write(6,*) 'check hpsi fail! Bug x recorded in outfile! use hpsi to check!'
+                call abort 
+            else              
+                if (nblocknow > neq) then             
+                ! output all the x.  call it path.out
+                    open(unit=19,form='unformatted',file='path.unf',position='append')
+                    write(19) ipath
+                    do l=0,nproc()-1    
+                        write (19) l
+                        write (19) iplall((6*l+1):(6*(l+1))) 
+                        write (19) jplall((6*l+1):(6*(l+1))) 
+                        write (19) iprall((6*l+1):(6*(l+1))) 
+                        write (19) jprall((6*l+1):(6*(l+1))) 
+                        write (19) xall((ixtemp*l+1):(ixtemp*(l+1)))               
+                    enddo 
+                    close(19)  
+                    open(unit=19,form='formatted',file='pathnumbercounts.txt',position='rewind')
+                    write (19,'(3i10)') nproc(),ipath,ixtemp
+                    close(19)
+                    ipath=ipath+1              
+                else                
+                    open(unit=19,form='unformatted',file='path0.unf',position='append')
+                    write(19) ipathtmp
+                    do l=0,nproc()-1    
+                        write (19) l
+                        write (19) iplall((6*l+1):(6*(l+1))) 
+                        write (19) jplall((6*l+1):(6*(l+1))) 
+                        write (19) iprall((6*l+1):(6*(l+1))) 
+                        write (19) jprall((6*l+1):(6*(l+1))) 
+                        write (19) xall((ixtemp*l+1):(ixtemp*(l+1)))               
+                    enddo 
+                    close(19)  
+                    open(unit=19,form='formatted',file='path0numbercounts.txt',position='rewind')
+                    write (19,'(3i10)') nproc(),ipathtmp,ixtemp
+                    close(19)
+                    ipathtmp=ipathtmp+1                                             
+                endif         
+                if (nrepmax /= 0) then
+                    open(unit=19,form='formatted',file='reptationMON.txt',position='rewind')
+                ! check reptation number of steps distributions.
+                    do i=0,irepstepmonmax
+                        write(19,'( i10 , i10, f15.7, i10, f15.7 )') i,repstepct1sum(i),repstepct1sum(i)/sum1 &
+                                                                    ,repstepct2sum(i),repstepct2sum(i)/sum2 
+                    enddo 
+                    close(19)     
+                    open(unit=19,form='formatted',file='reparrowhist.txt',position='append')
+                ! check reptation direction history.
+                    do i=icrephistlast,icrephist
+                        write(19,'( i10,1x,i10 )') i,ireparrowhistory(i)
+                    enddo 
+                    icrephistlast=icrephist+1
+                    close(19) 
+                endif               
             endif
             deallocate(xall,iplall,jplall,iprall,jprall,icheck1d,psi201d,psi2n1d)   
         endif
@@ -1070,36 +1102,17 @@ contains
         !endif
           
     !!! reptation        
-        !if (nrepmax == 1) then
-        ! !call reptation1 
-        ! call reptation
-        !else
-        ! call reptation       
-        !endif
-    !!! reptation, consider a bisection like reptation.
+    !    if (nrepmax == 1) then
+    !     !call reptation1 
+    !        call reptation
+    !    else 
+    !        if (nrepmax /= 0) then
+    !            call reptation  
+    !        endif
+    !    endif
+    !!! reptation, consider a bisection-ike reptation.
    
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-     
+
     ! below are mixed move, turn off now.  
     !----------------------------------------------      
         !rn=randn(1)
@@ -1334,6 +1347,7 @@ contains
     endif  
 
     rejectbisectv6improve=reject
+    
     return  
     end subroutine bisectv6b            
    
@@ -4271,44 +4285,33 @@ contains
     !   
    
 
-    subroutine corrchk(xin,ixd,corr,lmax) 
+    subroutine corrchk(x,ixd,corrin,lmax)   ! lmax is useless, change it perhaps to kappa.
+! Interacting Electrons, Ceperley et al, p585. 
+! MC in ab initio quantum chemstry, Hammond et al, p59.    
     use wavefunction
     use estimator
     use random
-    integer(kind=i4) :: ixd,lmax,lcorr,icorr,stepdecorr ! lmax <= ixd, usally set ixd=lmax=nstepdecor
+    integer(kind=i4) :: ixd,lmax,lcorr,icorr,stepdecorr,i,j,k! lmax <= ixd, usally set ixd=lmax=nstepdecor
     real(kind=r8) :: xave,xvar,tauintg
-    real(kind=r8), allocatable :: xin(:),corr(:)
+    real(kind=r8) :: x(:),corrin(:),kappa(ixd-1)
     logical :: findstepdecorr
-    ! nstepdecor usually set the same as nstep. 
-    xave=sum(xin(:))/dble(ixd)
-    xvar=sum(xin(:)**2)/dble(ixd)-xave**2      
+    ! nstepdecor usually set the same as nstep when do the correlation check.
+    xave=sum(x(1:ixd))/ixd
+    xvar=sum(x(1:ixd)**2)/ixd-xave**2      
     findstepdecorr=.false.
-    corr=0.
-    tauintg=0.
+    corrin=0.
+    kappa=0
     OPEN(31,FILE='correlationcheck.txt',FORM='FORMATTED')
-    WRITE(31,'(2x,5(G15.8,2x))') 'k','corr(k)','tauintg' 
-    do lcorr=0,lmax     
-	    do icorr=1,ixd-lcorr
-		    corr(lcorr)=corr(lcorr)+ (xin(icorr)-xave)*(xin(icorr+lcorr)-xave)
+    WRITE(31,'(2x,5(G15.8,2x))') 'k','corr(k)','kappa' 
+    do lcorr=1,ixd-1 ! k     
+	    do icorr=1,ixd-lcorr ! n
+		    corrin(lcorr)=corrin(lcorr)+ (x(icorr)-xave)*(x(icorr+lcorr)-xave)
 	    enddo
-	    corr(lcorr)=corr(lcorr)/dble(ixd-lcorr)/xvar ! in hand book of MC, they say divide by ixd instead of (ixd-lcorr). 
-	    tauintg=tauintg+corr(lcorr)
-    WRITE(31,'(2x,20(G15.8,2x))') lcorr,corr(lcorr),tauintg
-    if (corr(lcorr).lt.exp(-1.)) then
-	    stepdecorr=int(dble(lcorr)/50.)*50+50 ! can be other number, I choose 50.
-    WRITE(6,'(2x,20(G15.8,2x))') '--------','stepdecorr=', stepdecorr,'--------' 		
-    WRITE(31,'(2x,20(G15.8,2x))') '--------','stepdecorr=', stepdecorr,'--------' 
-	    findstepdecorr=.true.
-	    exit
-    else
-    endif 
-    enddo  
-    if (findstepdecorr) then
-    else
-	    WRITE(6,'(2x,20(G15.8,2x))') 'did not find stepdecorr within nstepdecor! Increase	nstepdecor!'
-	    WRITE(31,'(2x,20(G15.8,2x))') 'did not find stepdecorr within nstepdecor! Increase nstepdecor!'
-    endif
-    close(31)
+	    corrin(lcorr)=corrin(lcorr)/(ixd-lcorr)/xvar 
+        kappa(lcorr)=1+2*sum(corrin(1:lcorr))
+        WRITE(31,'(2x,20(G15.8,2x))') lcorr,corrin(lcorr),kappa(lcorr)
+    enddo    
+    close(31) 
     return  
     end subroutine corrchk       
    
@@ -4354,13 +4357,13 @@ contains
     ibisect=0
     ibisecttot=0
     icbisecttot=0
-    bisectrate=0.
-    bisectcount=0.
-    bisecttot=0.
-    bisectcountl=0.
-    bisecttotl=0.
-    bisectcountr=0.
-    bisecttotr=0.
+    bisectrate=0
+    bisectcount=0
+    bisecttot=0
+    bisectcountl=0
+    bisecttotl=0
+    bisectcountr=0
+    bisecttotr=0
     ibisectl=0
     ibisecttotl=0
     ibisectr=0
@@ -4377,49 +4380,104 @@ contains
     eloctot=0.
     return
     end subroutine zeroeloc
+    
+    subroutine checkblkstat ! the check stuck config clock.
+    use mympi
+    integer(kind=i4) :: i,j,k,myunit
+    real(kind=r8) :: r(10)
+    character(len=30) :: filename    
+    real(kind=r8) :: xtot(3,npart,0:nchorizo)
+    integer(kind=i4) :: ipl(6),jpl(6),ipr(6),jpr(6)
+      
+    r(1)=dble(icmov1)/icmov1tot
+    r(2)=dble(icstdmove2)/icstdmove2tot
+    r(3)=dble(icshft)/icshfttot
+    r(4)=dble(ic23)/ic23tot
+    r(5)=dble(icn)/icntot
+    r(6)=dble(iclr)/iclrtot
+    r(7)=dble(icrep)/icreptot
+    r(8)=dble(ibisect)/ibisecttot
+    r(9)=dble(ibisectl)/ibisecttotl
+    r(10)=dble(ibisectr)/ibisecttotr
+     
+    if ((ibisect.eq.0).or.(ibisectl.eq.0).or.(ibisectr.eq.0)) then
+        nblockstuck=nblocknow
+        ibisectstuck(nblockstuck)=1        
+        if ( nblockstuck >= 5 ) then 
+            if (sum(ibisectstuck(nblockstuck-4:nblockstuck)).eq.5) then
+                call chorizoallout(xtot,ipl,jpl,ipr,jpr) 
+                write(filename,'("myrank",i10,".stuck")') myrank()
+                open(newunit=myunit,form='formatted',file=trim(filename),position='rewind')  
+                    write (myunit,*) 'nsteps really stuck are ',nblockstuck            
+                    write (myunit,'(6i10)') ibisect,ibisecttot,ibisectl,ibisecttotl,ibisectr,ibisecttotr
+                    write (myunit,'(6i10)') ipl
+                    write (myunit,'(6i10)') jpl
+                    write (myunit,'(6i10)') ipr
+                    write (myunit,'(6i10)') jpr
+                    write (myunit,'(3e15.7)') reshape(xtot,(/3*npart*(nchorizo+1)/))      
+                close(myunit)
+                write(6,*) 'stuck configuration, abort! myrank= ', myrank()
+                call abort                         
+            endif       
+        endif
+    endif
+
+    return
+    end subroutine checkblkstat
      
     subroutine showstat
     use mympi
     integer(kind=i4) :: i,j,k
+    real(kind=r8) :: r(10)
       
-   
+    r(1)=dble(icmov1)/icmov1tot
+    r(2)=dble(icstdmove2)/icstdmove2tot
+    r(3)=dble(icshft)/icshfttot
+    r(4)=dble(ic23)/ic23tot
+    r(5)=dble(icn)/icntot
+    r(6)=dble(iclr)/iclrtot
+    r(7)=dble(icrep)/icreptot
+    r(8)=dble(ibisect)/ibisecttot
+    r(9)=dble(ibisectl)/ibisecttotl
+    r(10)=dble(ibisectr)/ibisecttotr
+    
     bisectrate(:)=bisectcount(:)/bisecttot(:)
    
     write (6,'(''dt ='',t40,f10.5)') dt
     write (6,'(''nchorizo ='',t40,i10)') nchorizo 
    
-    write (6,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') dble(icmov1)/dble(icmov1tot),icmov1,icmov1tot,icstdmove1tot
-    write (6,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') dble(icstdmove2)/dble(icstdmove2tot),icstdmove2,icstdmove2tot
-    write (6,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') dble(icshft)/dble(icshfttot),icshft,icshfttot
-    write (6,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') dble(ic23)/dble(ic23tot),ic23,ic23tot
-    write (6,'(''icn ratio ='',t40,f10.5,2(i10))') dble(icn)/dble(icntot),icn,icntot
-    write (6,'(''lr ratio ='',t40,f10.5,2(i10))') dble(iclr)/dble(iclrtot),iclr,iclrtot
-    write (6,'(''reptation ratio ='',t40,f10.5,3(i10))') dble(icrep)/dble(icreptot),icrep,icreptot
-    write (6,'(''ibisect ratio ='',t40,f10.5,3(i10))') dble(ibisect)/dble(ibisecttot),ibisect,ibisecttot,icbisecttot
+    write (6,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') r(1),icmov1,icmov1tot,icstdmove1tot
+    write (6,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') r(2),icstdmove2,icstdmove2tot
+    write (6,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') r(3),icshft,icshfttot
+    write (6,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') r(4),ic23,ic23tot
+    write (6,'(''icn ratio ='',t40,f10.5,2(i10))') r(5),icn,icntot
+    write (6,'(''lr ratio ='',t40,f10.5,2(i10))') r(6),iclr,iclrtot
+    write (6,'(''reptation ratio ='',t40,f10.5,3(i10))') r(7),icrep,icreptot
+    write (6,'(''ibisect ratio ='',t40,f10.5,3(i10))') r(8),ibisect,ibisecttot,icbisecttot
     write (6,'(''bisection level 1 to mmax ratio ='',t40,f10.5)') (bisectrate(k),k=1,mmax)
-    write (6,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') dble(ibisectl)/dble(ibisecttotl),ibisectl,ibisecttotl
+    write (6,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') r(9),ibisectl,ibisecttotl
     !write (6,'(''bisection lend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountl(k)/bisecttotl(k),k=0,mmax-1)
-    write (6,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') dble(ibisectr)/dble(ibisecttotr),ibisectr,ibisecttotr
+    write (6,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') r(10),ibisectr,ibisecttotr
     !write (6,'(''bisection rend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountr(k)/bisecttotr(k),k=0,mmax-1)
     write (6,'(''# of energy samples ='',t40,i10)') ice
     write (6,*) 
    
-   
-    write (12,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') dble(icmov1)/dble(icmov1tot),icmov1,icmov1tot,icstdmove1tot
-    write (12,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') dble(icstdmove2)/dble(icstdmove2tot),icstdmove2,icstdmove2tot
-    write (12,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') dble(icshft)/dble(icshfttot),icshft,icshfttot
-    write (12,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') dble(ic23)/dble(ic23tot),ic23,ic23tot
-    write (12,'(''icn ratio ='',t40,f10.5,2(i10))') dble(icn)/dble(icntot),icn,icntot
-    write (12,'(''lr ratio ='',t40,f10.5,2(i10))') dble(iclr)/dble(iclrtot),iclr,iclrtot
-    write (12,'(''reptation ratio ='',t40,f10.5,3(i10))') dble(icrep)/dble(icreptot)
-    write (12,'(''ibisect ratio ='',t40,f10.5,3(i10))') dble(ibisect)/dble(ibisecttot),ibisect,ibisecttot,icbisecttot
+    write (12,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') r(1),icmov1,icmov1tot,icstdmove1tot
+    write (12,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') r(2),icstdmove2,icstdmove2tot
+    write (12,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') r(3),icshft,icshfttot
+    write (12,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') r(4),ic23,ic23tot
+    write (12,'(''icn ratio ='',t40,f10.5,2(i10))') r(5),icn,icntot
+    write (12,'(''lr ratio ='',t40,f10.5,2(i10))') r(6),iclr,iclrtot
+    write (12,'(''reptation ratio ='',t40,f10.5,3(i10))') r(7),icrep,icreptot
+    write (12,'(''ibisect ratio ='',t40,f10.5,3(i10))') r(8),ibisect,ibisecttot,icbisecttot
     write (12,'(''bisection level 1 to mmax ratio ='',t40,f10.5)') (bisectrate(k),k=1,mmax)
-    write (12,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') dble(ibisectl)/dble(ibisecttotl),ibisectl,ibisecttotl
+    write (12,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') r(9),ibisectl,ibisecttotl
     !write (12,'(''bisection lend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountl(k)/bisecttotl(k),k=0,mmax-1)
-    write (12,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') dble(ibisectr)/dble(ibisecttotr),ibisectr,ibisecttotr
+    write (12,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') r(10),ibisectr,ibisecttotr
     !write (12,'(''bisection rend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountr(k)/bisecttotr(k),k=0,mmax-1)
     write (12,'(''# of energy samples ='',t40,i10)') ice
     write (12,*) 	  
+    
     return
     end subroutine showstat 
    
@@ -4913,6 +4971,8 @@ contains
         
         open(unit=19,form='unformatted',file='path.unf',status='replace',position='rewind') 
         close(19)
+        open(unit=19,form='unformatted',file='path0.unf',status='replace',position='rewind') 
+        close(19)
         open(unit=19,form='formatted',file='reparrowhist.txt',status='replace',position='rewind')
         close(19)
         open(unit=11,form='formatted',file='values.txt',status='replace',position='rewind')
@@ -5092,7 +5152,7 @@ contains
                         call recv(jpro,0,4)
                         call recv(x0tot1d,0,5)                  
                     endif            
-                    ! calculate                          
+                    ! calculate 
                     x0tot=reshape(x0tot1d,shape(x0tot)) 
                     call computecore(x0tot,iplo,jplo,ipro,jpro,0,np-1)    
                     ! update                       

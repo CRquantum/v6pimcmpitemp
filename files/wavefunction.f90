@@ -76,14 +76,11 @@ contains
     integer(kind=i4) :: i,j,k,l,dim,ib,jb,is,js,jbmax,index
     real(kind=r8), dimension(3) :: dx,sumcor,rc
     real(kind=r8) :: r,dr,duu,c1,c2,c3,c4   
-        !  funcRMSQ=(x1-(x1+x2+x3+x4)/4.)**2
-        !& +(y1-(y1+y2+y3+y4)/4.)**2
-        !& +(z1-(z1+z2+z3+z4)/4.)**2 
     do l=1,3   
 	    rc(l)=sum(x(l,:))/4
     enddo
-	    rmsq=sum((x(:,1)-rc(:))**2)
-	    rm=sqrt(rmsq)
+	rmsq=sum((x(:,1)-rc(:))**2)
+	rm=sqrt(rmsq)
     return
     end subroutine funcrmsq
    

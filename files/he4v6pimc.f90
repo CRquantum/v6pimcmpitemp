@@ -10,7 +10,7 @@
    use estimatorristra
    use wavefunction
    use math
-   use matrixmod
+   !use matrixmod
 ! perhaps make those constants a type, which can be used in all the module.
 
    implicit none
@@ -52,7 +52,7 @@
     read (5,*) nprot   ! proton number
     read (5,*) ntab    ! table points for potential
     read (5,*) mmax    ! max level of bisection, nbisect=2**mmax
-    read (5,*) nrepmax ! max # of beads for reptation
+    read (5,*) nrepmax ! max # of beads for reptation, 0 means off.
     !   read (5,*) i ! i input
     !   read (5,*) j ! j input
     !   read (5,*) nstate ! name the input state. 

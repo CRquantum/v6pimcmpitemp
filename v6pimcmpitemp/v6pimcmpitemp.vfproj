@@ -59,7 +59,8 @@
 			<FileConfiguration Name="Debug|x64" ExcludedFromBuild="true"/></File>
 		<File RelativePath="..\files\he4v6pimc.f90"/>
 		<File RelativePath="..\files\math.f90"/>
-		<File RelativePath="..\files\matrixlapack.f90"/>
+		<File RelativePath="..\files\matrixlapack.f90">
+			<FileConfiguration Name="Debug|x64" ExcludedFromBuild="true"/></File>
 		<File RelativePath="..\files\mympi.f90"/>
 		<File RelativePath="..\files\nompi.f90">
 			<FileConfiguration Name="Release|x64" ExcludedFromBuild="true"/>

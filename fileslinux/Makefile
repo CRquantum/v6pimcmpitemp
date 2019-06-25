@@ -9,9 +9,9 @@ ifeq ($(MPI),true)
 #OMP= #-openmp -lpthread -openmp-report
 FFLAGS= -O3 -xHost # -fast # -O2
 F77FLAGS=$(FFLAGS)  -r8 # intel fortran
-LDFLAGS=-L/opt/intel/mkl/lib/intel64
-LIBS=-lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_intel_thread -lmkl_lapack95_lp64 -lmkl_core -liomp5 -lpthread #-check all -warn all
-MATRIX=matrixlapack
+#LDFLAGS=-L/opt/intel/mkl/lib/intel64
+#LIBS=-lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_intel_thread -lmkl_lapack95_lp64 -lmkl_core -liomp5 -lpthread #-check all -warn all
+#MATRIX=matrixlapack
 else
    FC=gfortran
    MPIFILE=nompi
@@ -19,9 +19,9 @@ else
 #OMP= #-openmp -lpthread -openmp-report
 FFLAGS= -O3 # -O2
 F77FLAGS=$(FFLAGS) -fdefault-real-8 -fdefault-double-8 # gfortran only.
-MATRIX=matrixlapack
-LDFLAGS=-L/usr/local/lib
-LIBS=-llapack -lrefblas -ltmglib
+#MATRIX=matrixlapack
+#LDFLAGS=-L/usr/local/lib
+#LIBS=-llapack -lrefblas -ltmglib
 endif
 
 
@@ -44,7 +44,6 @@ lattice.o\
 lj.o\
 math.o\
 $(MPIFILE).o\
-$(MATRIX).o\
 pot.o\
 ran.o\
 step.o\
@@ -93,23 +92,20 @@ math.o: math.f90
 $(MPIFILE).o: $(MPIFILE).f90
 	$(FC) $(FFLAGS) -c $(MPIFILE).f90
 
-$(MATRIX).o: $(MATRIX).f90
-	$(FC) $(FFLAGS) -c $(MATRIX).f90
-
 pot.o: pot.f
 	$(FC) $(F77FLAGS) -c pot.f
 
 ran.o: ran.f90
 	$(FC) $(FFLAGS) -c ran.f90
 
-step.o: chorizos.o math.o wavefunction.o v6stepcalc.o ran.o brut.o $(MATRIX).o $(MPIFILE).o\
+step.o: chorizos.o math.o wavefunction.o v6stepcalc.o ran.o brut.o $(MPIFILE).o\
   estimator.o estimatorristra.o lj.o step.f90
 	$(FC) $(FFLAGS) -c step.f90
 
 v6pot.o: cheft.o $(MPIFILE).o v6pot.f90
 	$(FC) $(FFLAGS) -c v6pot.f90
 
-v6stepcalc.o: v6pot.o $(MPIFILE).o math.o brut.o $(MATRIX).o v6stepcalc.f90
+v6stepcalc.o: v6pot.o $(MPIFILE).o math.o brut.o v6stepcalc.f90
 	$(FC) $(FFLAGS) -c v6stepcalc.f90
 
 volume.o: volume.f90

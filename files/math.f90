@@ -1,4 +1,3 @@
-!$Id: wavefunction.f90,v 1.2 2003/02/25 18:11:59 nuclear Exp $
 module math
    implicit none
    integer, private, parameter :: i4=selected_int_kind(9)

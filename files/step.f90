@@ -121,15 +121,7 @@ contains
     allocate(cwtground(0:nspin-1,nisospin))
     allocate(invspin(nbasis),invispin(nbasis))  
     call getcwtgnd(cwtground,invspin,invispin)
-   
-    irepstepmonmax=10*nchorizo
-    allocate(repstepct1(0:irepstepmonmax),repstepct2(0:irepstepmonmax))
-    allocate(repstepct1sum(0:irepstepmonmax),repstepct2sum(0:irepstepmonmax))
-    repstepct1=0
-    repstepct2=0
-    repstepct1sum=0
-    repstepct2sum=0  
-   
+      
     nav=navin
     nstep=nstepin
     neq=neqin
@@ -138,9 +130,16 @@ contains
     allocate(ibisectstuck(nav+neq))
     ibisectstuck=0 ! check how many times bisection stuck.    
     
-    if (nrepmax /= 0) then
+    if (nrepmax /= 0) then ! for reptation.
+        irepstepmonmax=10*nchorizo
+        allocate(repstepct1(0:irepstepmonmax),repstepct2(0:irepstepmonmax))
+        allocate(repstepct1sum(0:irepstepmonmax),repstepct2sum(0:irepstepmonmax))
+        repstepct1=0
+        repstepct2=0
+        repstepct1sum=0
+        repstepct2sum=0         
         allocate(ireparrowhistory(0:nav*nstep))
-        ireparrowhistory=0
+        ireparrowhistory=0 
     endif
    
     return
@@ -415,7 +414,7 @@ contains
     use random
     use brut
     use mympi
-    real(kind=r8) :: rn(1),rm,rmsq,r1,r2,r3,r23,rb
+    real(kind=r8) :: rn(1),rm,rmsq
     real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
 	                ,x0tot(3,npart,0:nchorizo)
     real(kind=r8), dimension(0:nrhobin) :: rhodistout
@@ -427,7 +426,13 @@ contains
     real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
-   
+! set rate parameters for different kind of moves.    
+    real(kind=r8), parameter :: rb=1 ! 0.9   bisection rate(reptation if enabled is in it.)
+    real(kind=r8), parameter :: r1=0.95 ! move 1 by 1    
+    real(kind=r8), parameter :: r2=0.967 ! move all beads  
+    real(kind=r8), parameter :: r3=0.984 ! shift beads
+    real(kind=r8), parameter :: r23=1  ! move all + shift     
+      
     nblocknow=nblocknowin
     
     icstepstd=icstepstd+1
@@ -454,11 +459,11 @@ contains
 	    !call stdmove
 	  
        
-        rb=0.9
-        r1=0.95
-        r2=0.967
-        r3=0.984
-        r23=1
+        !rb=1 ! 0.9   bisection rate(reptation if enabled is in it.)
+        !r1=0.95 ! move 1 by 1    
+        !r2=0.967 ! move all beads  
+        !r3=0.984 ! shift beads
+        !r23=1  ! move all + shift     
      
         !rb=0.
         !r1=0.
@@ -551,12 +556,12 @@ contains
         call gather(icheck,icheck1d)
         call gather(psi20,psi201d)
         call gather(psi2n,psi2n1d)  
-   
-        call addall(repstepct1,repstepct1sum)
-        call addall(repstepct2,repstepct2sum)   
-        sum1=sum(repstepct1sum)
-        sum2=sum(repstepct2sum)   
-   
+        if (nrepmax /= 0) then
+            call addall(repstepct1,repstepct1sum)
+            call addall(repstepct2,repstepct2sum)   
+            sum1=sum(repstepct1sum)
+            sum2=sum(repstepct2sum)   
+        endif
         if (myrank().eq.0) then
             if (sum(icheck1d) /= 0) then
                 open(unit=19,form='formatted',file='bugbeads.out',position='rewind')
@@ -681,6 +686,8 @@ contains
     integer(kind=i4) :: i,j
     real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),gauss(3,npart)
     real(kind=r8) ::  newp,oldp,rn(1)
+    
+    if (nrepmax.eq.0) return
     
     icrephist=icrephist+1
     icreptot=icreptot+1
@@ -826,6 +833,8 @@ contains
     real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),gauss(3,npart),xr1(3,npart),xl1(3,npart)
     real(kind=r8) ::  newp,oldp,rn(1),newp1,oldp1 
    
+    if (nrepmax.eq.0) return
+    
     icrephist=icrephist+1
     icreptot=icreptot+1
     ristraold(0:nchorizo)=ristra(0:nchorizo)
@@ -2888,7 +2897,7 @@ contains
     end subroutine bisectv6improvew11      
 
    
-    subroutine stdmove1fastv6a(ileft,iright) ! need to modify.
+    subroutine stdmove1fastv6a(ileft,iright) ! need to modify. have not done I think, 20190629. may not needed.
     ! ileft < iright; update from left to right. 
     ! This is move 1 by 1, but different way of move, this is like a 2-beads bisect.
     use wavefunction
@@ -4247,12 +4256,14 @@ contains
     end subroutine showstatVMC
     
     subroutine zerepstepmon ! monitor the history of rqmc steps.
+    if (nrepmax.eq.0) return
     repstepct1=0
     repstepct2=0
     repstepct1sum=0
     repstepct2sum=0  
     icrephist=0
     icrephistlast=0
+    return
     end subroutine zerepstepmon
    
     subroutine counterinit ! zero the stats after finishing one block.

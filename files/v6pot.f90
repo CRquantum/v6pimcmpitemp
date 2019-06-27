@@ -13,8 +13,8 @@ contains
    use cheft
    !use mympi
    real(kind=r8) :: vfact(8),elin
-   integer(kind=i4) :: ntabin,lpot,i,npartin,iboxin,j,lpotpr
-   real(kind=r8) :: dr,h2m,h2mcsb,vv(18),vv2(18),vv3(18),vp(12),ww(14),vem(14)
+   integer(kind=i4) :: ntabin,lpot,i,npartin,iboxin,lpotpr
+   real(kind=r8) :: dr,vv(18),vem(14)
    real(kind=r8) :: rr
    real(kind=r8) :: v0r,v0s,v0t,vr,vs,vt,kr,ks,kt
    real(kind=r8), parameter :: verytiny=1.0e-20_r8
@@ -142,7 +142,7 @@ contains
 
    subroutine getvtab(vout) ! call v6potinit first
    use mympi
-   integer(kind=i4) :: i,j 
+   integer(kind=i4) :: i
    real(kind=r8) :: vout(6,0:ntab)
    
    if (myrank().eq.0) then
@@ -164,7 +164,7 @@ contains
    
    subroutine getvtabschmidt(vout) ! call v6potinit first, Schmidt order. use this to linearize e^(v6).
    use mympi
-   integer(kind=i4) :: i,j 
+   integer(kind=i4) :: i
    real(kind=r8) :: vout1(6,0:ntab),vout(6,0:ntab)
    if (myrank().eq.0) then
    open(unit=9,form='formatted',file='vtableSchmidt.dat')
@@ -198,7 +198,7 @@ contains
    
    subroutine getvemtab(vout) ! call v6potinit first
    use mympi
-   integer(kind=i4) :: i,j 
+   integer(kind=i4) :: i
    real(kind=r8) :: vout(0:ntab)
    if (myrank().eq.0) then
    open(unit=9,form='formatted',file='vemtable.dat')

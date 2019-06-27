@@ -94,8 +94,12 @@ contains
       valblk=valsum
       wtblk=wtsum
       val2=val2sum
-      do i=1,nest
-         valnow(:,i)=valblk(:,i)/wtblk(i)
+      do i=1,nest 
+         if (wtblk(i)/=0) then 
+             valnow(:,i)=valblk(:,i)/wtblk(i)
+         else
+             valnow(:,i)=0
+         endif 
       enddo
       avbad=avbad+valnow
       av2bad=av2bad+valnow**2
@@ -119,7 +123,11 @@ contains
    character(len=*) :: labelristra
    labelristra=label(i)
    vnow(:)=valnow(:,i) 
-   val(:)=valtot(:,i)/wttot(i)
+   if (wttot(i) /= 0) then
+       val(:)=valtot(:,i)/wttot(i)
+   else
+       val=0
+   endif
    if ( (irep.eq.5).or.(irep.eq.6)  ) then   
        av=val  
        if (wttot(i) /= 0 ) then

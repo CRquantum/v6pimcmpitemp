@@ -50,9 +50,9 @@ contains
 	    ,nprotin,navin,nstepin,neqin)
     use math
     use v6stepcalc
-    real(kind=r8) :: hbarin,dtin,elin,dcut,repprobin,ecutin,etrialin &
+    real(kind=r8) :: hbarin,dtin &
                     ,x0stepin,mov1stepin,mov2stepin,shftstepin
-    integer(kind=i4) :: npartin,nchorizoin,nrepmaxin,irepin,mmaxin,nstepdecorin,nrhobinin,nprotin,ntabin &
+    integer(kind=i4) :: npartin,nchorizoin,nrepmaxin,irepin,mmaxin,nstepdecorin,nrhobinin,nprotin &
                         ,navin,nstepin,neqin
     integer(kind=i4) :: i,nristra
     logical :: icorrchkin
@@ -190,18 +190,13 @@ contains
     use brut
     use mympi
     integer(kind=i4) :: i,j,k,nptot,ixtemp,icheck,l
-    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart),xtmp(3,npart) &
-                    ,val1,val2,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin),cwta(25,0:nspin-1,nisospin) &
-                        ,cwta1(25,0:nspin-1,nisospin),cwta2(25,0:nspin-1,nisospin) &
-                        ,cwt1(0:nspin-1,nisospin),cwt2(0:nspin-1,nisospin) 
+    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart) &
+                    ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
     real(kind=r8) ::  rangex
     character(len=70) :: infilein,outfilein  
     logical :: isitein
-    real(kind=r8) :: psi20,psi2n,e0,en,e,psi2,pe0,pen,psi2a(1,1),psi2b
-    real(kind=r8) :: d20(3,npart),f0(3,npart),d2n(3,npart),fn(3,npart) 
-    real(kind=r8) :: vn,vd,rgl,rgr,rg,rf,absf,vnum,vdenom,vnke,vnpev6,vnpeem
-    complex(kind=r8) :: f
+    real(kind=r8) :: psi20,psi2n
+    real(kind=r8) :: vn,vd,rf,vnke,vnpev6,vnpeem
     real(kind=r8), parameter :: dxx=.02d0  
     integer(kind=i4), allocatable :: icheck1d(:)
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
@@ -358,12 +353,9 @@ contains
     use v6stepcalc
     use brut 
     use random
-    integer(kind=i4) :: i,j,k
-    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin)	
-    real(kind=r8) ::  rangex,newp,oldp,rn(1)
-    character(len=70) :: infilein,outfilein  
-    logical :: isitein
+    integer(kind=i4) :: i,j
+    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart)
+    real(kind=r8) ::  newp,oldp,rn(1)
    
     iclrtot=iclrtot+1
    
@@ -423,20 +415,18 @@ contains
     use random
     use brut
     use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
+    real(kind=r8) :: rn(1),rm,rmsq,r1,r2,r3,r23,rb
     real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,nblocknowin
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
+	                ,x0tot(3,npart,0:nchorizo)
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout
+    integer(kind=i4) :: i,l,ixd,lmax,icheck,ixtemp,nblocknowin
+    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rf,vnum,vdenom &
                     ,sum1,sum2
     real(kind=r8) :: psi20,psi2n
-    complex(kind=r8) :: f
     integer(kind=i4), allocatable :: icheck1d(:)
     real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
-    integer(kind=i4) :: iounit
    
     nblocknow=nblocknowin
     
@@ -688,12 +678,9 @@ contains
     use random
     use mympi
     use estimator
-    integer(kind=i4) :: i,j,k
-    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart),gauss(3,npart),xr1(3,npart),xl1(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin)	
-    real(kind=r8) ::  rangex,newp,oldp,rn(1),newp1,oldp1
-    character(len=70) :: infilein,outfilein  
-    logical :: isitein
+    integer(kind=i4) :: i,j
+    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),gauss(3,npart)
+    real(kind=r8) ::  newp,oldp,rn(1)
     
     icrephist=icrephist+1
     icreptot=icreptot+1
@@ -835,12 +822,9 @@ contains
     use random
     use mympi
     use estimator
-    integer(kind=i4) :: i,j,k
-    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart),gauss(3,npart),xr1(3,npart),xl1(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin)	
-    real(kind=r8) ::  rangex,newp,oldp,rn(1),newp1,oldp1
-    character(len=70) :: infilein,outfilein  
-    logical :: isitein
+    integer(kind=i4) :: i,j
+    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),gauss(3,npart),xr1(3,npart),xl1(3,npart)
+    real(kind=r8) ::  newp,oldp,rn(1),newp1,oldp1 
    
     icrephist=icrephist+1
     icreptot=icreptot+1
@@ -1059,8 +1043,7 @@ contains
    
     subroutine bisect
     use random
-    real(kind=r8) :: rn(1)
-    integer(kind=i4) :: ileftbisect,irightbisect,n1,n2,irn
+    integer(kind=i4) :: ileftbisect,irightbisect
  
     icbisecttot=icbisecttot+1   
    
@@ -1193,20 +1176,16 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2,nextra &
+					    ,k,bilvl &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
+    real(kind=r8) :: x(3,npart),xnew(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
     complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
 	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-   	                    ,cwtbegintmp1(0:nspin-1,nisospin),cwtendtmp1(0:nspin-1,nisospin) &
-                        ,cwtbegintmp2(0:nspin-1,nisospin),cwtendtmp2(0:nspin-1,nisospin)
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
     logical :: reject	
  
     ibisecttot=ibisecttot+1  
@@ -1346,21 +1325,18 @@ contains
     use v6stepcalc
     use brut
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt &
                         ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),x0new(3,npart),xold(3,npart) &
-                    ,x0old(3,npart),xendold(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: x(3,npart),xnew(3,npart),x0new(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
+    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin) &
+	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin) &
 	                    ,cwtendtmp(0:nspin-1,nisospin) &
-                        ,cwtbegintmp1(0:nspin-1,nisospin),cwtbegintmp2(0:nspin-1,nisospin) &
-                        ,cwtendtmpnow(0:nspin-1,nisospin)             
+                        ,cwtbegintmp2(0:nspin-1,nisospin)        
     logical :: reject	
 
     ibisecttotl=ibisecttotl+1  
@@ -1491,18 +1467,16 @@ contains
     use v6stepcalc
     use brut
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt &
                         ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart) &
-                    ,x0old(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart) 
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
     complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin) &
                         ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	              
                       
     logical :: reject	
@@ -1629,20 +1603,16 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2,nextra &
+					    ,k,bilvl &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
     complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
 	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-   	                    ,cwtbegintmp1(0:nspin-1,nisospin),cwtendtmp1(0:nspin-1,nisospin) &
-                        ,cwtbegintmp2(0:nspin-1,nisospin),cwtendtmp2(0:nspin-1,nisospin)
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) 
     logical :: reject	
  
     ibisecttot=ibisecttot+1  
@@ -1778,19 +1748,16 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2,nextra &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
     complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
 	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-   	                    ,cwtbegintmp1(0:nspin-1,nisospin),cwtendtmp1(0:nspin-1,nisospin) &
-                        ,cwtbegintmp2(0:nspin-1,nisospin),cwtendtmp2(0:nspin-1,nisospin)
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
     logical :: reject	
       
     irightbisect=ileftbisect+nbisect
@@ -1980,19 +1947,16 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2,nextra &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisecthalf,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmaxhalf),newlv(0:mmaxhalf)
     complex(kind=r8) :: cwtl2rtmp1(0:nbisecthalf,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisecthalf,0:nspin-1,nisospin) &
 	                    ,cwtl2rtmp2(0:nbisecthalf,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisecthalf,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-   	                    ,cwtbegintmp1(0:nspin-1,nisospin),cwtendtmp1(0:nspin-1,nisospin) &
-                        ,cwtbegintmp2(0:nspin-1,nisospin),cwtendtmp2(0:nspin-1,nisospin)
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
     logical :: reject	
    
     irightbisect=ileftbisect+nbisecthalf
@@ -2119,16 +2083,13 @@ contains
     use random
     use v6stepcalc
     use brut
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt &
-                        ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xref(3,npart) &
+    integer(kind=i4) :: ileftbisect,i &
+					    ,irightbisect 
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xnew(3,npart),xold(3,npart),xref(3,npart) &
                     ,xd2old(3,npart),xd2new(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3,rt3
+    real(kind=r8) :: tmp1,tmp2,logratio &
+	                ,rt2,rt3
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
 	
@@ -2241,16 +2202,13 @@ contains
     use random
     use v6stepcalc
     use brut
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt &
-                        ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xref(3,npart) &
+    integer(kind=i4) :: ileftbisect,i &
+					    ,irightbisect 
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xnew(3,npart),xold(3,npart),xref(3,npart) &
                     ,xd2old(3,npart),xd2new(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3,rt3
+    real(kind=r8) :: tmp1,tmp2,logratio &
+	                ,rt2,rt3
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin) 	              
    
@@ -2364,21 +2322,18 @@ contains
     use v6stepcalc
     use brut
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt &
                         ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),x0new(3,npart),xold(3,npart) &
-                    ,x0old(3,npart),xendold(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: x(3,npart),xnew(3,npart),x0new(3,npart),xold(3,npart) 
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmaxhalf),newlv(0:mmaxhalf)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisecthalf,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisecthalf,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisecthalf,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisecthalf,0:nspin-1,nisospin) &
+    complex(kind=r8) :: cwtl2rtmp1(0:nbisecthalf,0:nspin-1,nisospin) &
+	                    ,cwtl2rtmp2(0:nbisecthalf,0:nspin-1,nisospin) &
 	                    ,cwtendtmp(0:nspin-1,nisospin) &
-                        ,cwtbegintmp1(0:nspin-1,nisospin),cwtbegintmp2(0:nspin-1,nisospin) &
-                        ,cwtendtmpnow(0:nspin-1,nisospin)             
+                        ,cwtbegintmp2(0:nspin-1,nisospin)        
     logical :: reject	
 
     ibisecttotl=ibisecttotl+1  
@@ -2510,18 +2465,16 @@ contains
     use v6stepcalc
     use brut
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt &
                         ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart) &
-                    ,x0old(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmaxhalf),newlv(0:mmaxhalf)
     complex(kind=r8) :: cwtl2rtmp1(0:nbisecthalf,0:nspin-1,nisospin),cwtl2rtmp2(0:nbisecthalf,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin) &
                         ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	              
                       
     logical :: reject	
@@ -2667,14 +2620,12 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl,n1,n2 &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
     complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
 	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
@@ -2945,13 +2896,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    integer(kind=i4) :: i,k,ileft,iright,icnow
+    real(kind=r8) :: rn(1),gauss(3,npart)
     real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2,tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
+    real(kind=r8) :: rt2,tmp1,tmp2,logratio
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
 
@@ -3146,13 +3095,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    integer(kind=i4) :: i,k,ileft,iright,icnow
+    real(kind=r8) :: rn(1),gauss(3,npart)
     real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2,tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
+    real(kind=r8) :: rt2,tmp1,tmp2,logratio
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
 
@@ -3345,13 +3292,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
+    integer(kind=i4) :: i,k,ileft,iright,istep
+    real(kind=r8) :: rn(1),gauss(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2,tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
+    real(kind=r8) :: rt2,tmp1,tmp2,logratio
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
    
@@ -3537,15 +3482,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow,ileftnow,irightnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
+    integer(kind=i4) :: i,k,ileft,iright
+    real(kind=r8) :: rn(1),gauss(3,npart)
+    real(kind=r8) :: x(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2(0:nchorizo),tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
-    complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
-    complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
+    real(kind=r8) :: rt2(0:nchorizo),tmp1,tmp2,logratio
 
     if ((ileft.lt.0).or.(iright.gt.nchorizo).or.(iright.lt.0).or.(ileft.gt.nchorizo).or.(ileft.gt.iright)) then
 	    write (6,*) 'stdmove1fastv6 range error', ileft,iright
@@ -3704,15 +3645,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow,ileftnow,irightnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
+    integer(kind=i4) :: i,k,ileft,iright
+    real(kind=r8) :: rn(1),gauss(3,npart)
+    real(kind=r8) :: x(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2(0:nchorizo),tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
-    complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
-    complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
+    real(kind=r8) :: rt2(0:nchorizo),tmp1,tmp2,logratio
 
     if ((ileft.lt.0).or.(iright.gt.nchorizo).or.(iright.lt.0).or.(ileft.gt.nchorizo).or.(ileft.gt.iright)) then
 	    write (6,*) 'stdmove1fastv6 range error', ileft,iright
@@ -3872,15 +3809,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow,ileftnow,irightnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),gauss1(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
+    integer(kind=i4) :: i,k,ileft,iright
+    real(kind=r8) :: rn(1),gauss(3,npart),gauss1(3,npart)
+    real(kind=r8) :: x(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2(0:nchorizo),tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
-    complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
-    complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
+    real(kind=r8) :: rt2(0:nchorizo),tmp1,tmp2,logratio
 
     if ((ileft.lt.0).or.(iright.gt.nchorizo).or.(iright.lt.0).or.(ileft.gt.nchorizo).or.(ileft.gt.iright)) then
 	    write (6,*) 'stdmove1fastv6 range error', ileft,iright
@@ -4041,15 +3974,10 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow,ileftnow,irightnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
-	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2(0:nchorizo),tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
-    complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
-    complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k,ileft,iright
+    real(kind=r8) :: rn(1),gauss(3,npart)
+    real(kind=r8) :: x(3,npart),xr(3,npart),xl(3,npart)
+    real(kind=r8) :: rt2(0:nchorizo),tmp1,tmp2,logratio
 
    
    
@@ -4275,8 +4203,8 @@ contains
     use wavefunction
     use estimator
     use random
-    integer(kind=i4) :: ixd,lmax,lcorr,icorr,stepdecorr,i,j,k! lmax <= ixd, usally set ixd=lmax=nstepdecor
-    real(kind=r8) :: xave,xvar,tauintg
+    integer(kind=i4) :: ixd,lmax,lcorr,icorr,j! lmax <= ixd, usally set ixd=lmax=nstepdecor
+    real(kind=r8) :: xave,xvar
     real(kind=r8) :: x(:),corrin(:),kappa(ixd-1)
     integer(kind=i4) :: iounit
     logical :: findstepdecorr 
@@ -4372,7 +4300,7 @@ contains
     
     subroutine checkblkstat ! the check stuck config clock.
     use mympi
-    integer(kind=i4) :: i,j,k,myunit
+    integer(kind=i4) :: myunit
     real(kind=r8) :: r(10)
     character(len=30) :: filename    
     real(kind=r8) :: xtot(3,npart,0:nchorizo)
@@ -4416,7 +4344,7 @@ contains
      
     subroutine showstat
     use mympi
-    integer(kind=i4) :: i,j,k
+    integer(kind=i4) :: k
     real(kind=r8) :: r(10)
       
     r(1)=dble(icmov1)/icmov1tot
@@ -4472,8 +4400,8 @@ contains
    
     subroutine bisectpickslices(ileftbisect,irightbisect,ipick) 
     use random
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,irightbisect,imidbisect,k,bilvl,ipick,na,nb
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright
+    integer(kind=i4) :: ileftbisect,irightbisect,ipick,na,nb
+    real(kind=r8) :: rn(1)
     rn=randn(1)
     ! need to initialize nbisect and nchorizo first.
     na=nbisect/2
@@ -4486,8 +4414,8 @@ contains
    
     subroutine bisectpicksliceswide(ileftbisect,irightbisect) 
     use random
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,irightbisect,imidbisect,k,bilvl,ipick,na,nb,nchorizotot
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright
+    integer(kind=i4) :: ileftbisect,irightbisect
+    real(kind=r8) :: rn(1)
     rn=randn(1)
     ! need to initialize nbisect and nchorizo first.
     ileftbisect=min(int(dble(nchorizo+1)*rn(1)),nchorizo) ! min just to make sure, not really need.
@@ -4509,20 +4437,8 @@ contains
     use estimator
     use random
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
-   
+    integer(kind=i4) :: i
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
     call getcwtgnd2(cwt)
     call v6propr(ristra(0)%x,i,cwt,cwttmp)
     return
@@ -4533,19 +4449,8 @@ contains
     use estimator
     use random
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call getcwtgnd2(cwt)
     call v6propl(ristra(0)%x,i,cwt,cwttmp)
@@ -4554,19 +4459,8 @@ contains
    
     subroutine cwtr(k,i,cwttmp,cwt)
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call v6propr(ristra(k)%x,i,cwttmp,cwt)    
     return
@@ -4574,19 +4468,8 @@ contains
    
     subroutine cwtrpr(k,i,cwttmp,cwt)
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call v6proprpr(ristra(k)%x,i,cwttmp,cwt)    
     return
@@ -4595,19 +4478,8 @@ contains
    
     subroutine cwtl(k,i,cwttmp,cwt)
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call v6propl(ristra(k)%x,i,cwttmp,cwt)    
     return
@@ -4615,19 +4487,8 @@ contains
    
     subroutine cwtlpr(k,i,cwttmp,cwt) ! pr means use -dt.
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call v6proplpr(ristra(k)%x,i,cwttmp,cwt)    
     return
@@ -4638,11 +4499,9 @@ contains
     integer(kind=i4) :: i,j,it,index,ntab	
     real(kind=r8) :: x(3,npart) ! the configuration for the system
     real(kind=r8) :: dx(3)
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep,val,e1,e5! tstep=dt*2**it
+    real(kind=r8) :: r,c1,c2,c3,c4,dr,val,e1,e5! tstep=dt*2**it
     real(kind=r8) :: u(6),evdt(6),scalep,rangev,u1(6),u2(6),evdtinv(6)
-    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		                ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		                ,cwt1(0:nspin-1,nisospin)
+    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)
     real(kind=r8) :: utab(6,0:ntab,-mmax:mmax),evdttab(6,0:ntab,-mmax:mmax) 
     real(kind=r8) :: vtab(6,0:ntab)
 
@@ -4739,7 +4598,7 @@ contains
     use chorizos
     complex(kind=r8) :: cwtr2lm(0:nchorizo,0:nspin-1,nisospin),cwtl2rm(0:nchorizo,0:nspin-1,nisospin) ! m means middle.
     real(kind=r8) :: v
-    integer(kind=i4) :: i,j,k
+    integer(kind=i4) :: i
     real(kind=r8) :: x(3,npart) 
 
     x=ristra(i)%x 
@@ -4766,23 +4625,12 @@ contains
     use chorizos
     use mympi
     type (chorizo) :: c0,cn
-    complex(kind=r8) :: cwtr2lout(0:nchorizo,0:nspin-1,nisospin),cwtl2rout(0:nchorizo,0:nspin-1,nisospin) &
-	                    ,psith0cwt(0:nspin-1,nisospin),nhpsitcwt(0:nspin-1,nisospin) &
-	                    ,cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-	                    ,cwtnew1(0:nspin-1,nisospin),cwtold1(0:nspin-1,nisospin) &
-	                    ,cwtnew2(0:nspin-1,nisospin),cwtold2(0:nspin-1,nisospin)	&
-	                    ,h0psitcwt(0:nspin-1,nisospin),hnpsitcwt(0:nspin-1,nisospin) &
-                        ,cwta1(25,0:nspin-1,nisospin),cwta2(25,0:nspin-1,nisospin) &
-                        ,cwt(0:nspin-1,nisospin),cwta0(25,0:nspin-1,nisospin) &
-                        ,cwt1(0:nspin-1,nisospin),cwt2(0:nspin-1,nisospin)
+    complex(kind=r8) ::  cwta1(25,0:nspin-1,nisospin),cwta2(25,0:nspin-1,nisospin) 
     complex(kind=r8) :: f
-    real(kind=r8) :: rg,rgl,rgr,rf,absrf,valnum,valdenom,alr,blr,valnumpev6,valnumpeem,valnumke
-    real(kind=r8) :: psi20,psi2n,e0,en,e,psi2,pe0,pen,empe0,empen,psi,ke0,ken
-    integer(kind=i4) :: i,j,k,l
+    real(kind=r8) :: rf,absrf,valnum,valdenom,alr,blr,valnumpev6,valnumpeem,valnumke
+    real(kind=r8) :: psi20,psi2n,e0,en,psi2,pe0,pen,empe0,empen,psi,ke0,ken
     integer(kind=i4) :: icheck ! 0=pass,1=fail.
-    integer(kind=i4) :: invspin(nbasis),invispin(nbasis)
-    real(kind=r8) :: x(3,npart),x0(3,npart),xn(3,npart),d20(3,npart),f0(3,npart),d2n(3,npart),fn(3,npart) &
-                    ,r(3),dx(3)
+    real(kind=r8) :: x0(3,npart),xn(3,npart)
  
     !cwtr2lout=cwtr2l
     !cwtl2rout=cwtl2r
@@ -4992,9 +4840,8 @@ contains
     use v6stepcalc
     use brut 
     use random
-    integer(kind=i4) :: i,j,k
+    integer(kind=i4) :: i,j
     real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin)
    
     xl=ristra(0)%x 
     xr=ristra(nchorizo)%x
@@ -5027,32 +4874,20 @@ contains
     use brut
     use mympi
     use math
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb &
-                    ,time0,time1,time2,timeall,second
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,i1,j,k,k0,l,m,n,ipick,ixd,lmax,icheck,ixtemp,nmax,nmax1,nmax2
-    integer(kind=i4) :: np,n1,m1,n2,m2,n3,m3,n4,n4c,m4,m4c,n5,n51,n5c,m5,n6,n61,n6c,m6,lnow &
-                      ,idummy1,idummy2,npatheach0,npatheach,rankl,rankr &
+    real(kind=r8) :: time0,time1,timeall,second
+    real(kind=r8) :: x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
+    integer(kind=i4) :: i,j,k,k0,l,ixtemp,nmax,nmax1,nmax2
+    integer(kind=i4) :: np,n1,m1,n2,m2,n3,n4,n4c,m4,n5,n51,n5c,n6,n61,n6c,lnow &
+                      ,npatheach0,npatheach &
                       ,day,hour,minute
-    integer(kind=i4) :: ipathtot,ipathnow,ipathrest,ipc1,ipc2,ipc3 ! check i4 or i8
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n
-    complex(kind=r8) :: f
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
+    integer(kind=i4) :: ipathtot,ipathnow
     integer(kind=i4), allocatable :: iplall(:,:),jplall(:,:),iprall(:,:),jprall(:,:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:,:) ! for mpi_gather
     integer(kind=i4), allocatable :: iplallo(:),jplallo(:),iprallo(:),jprallo(:)	
     real(kind=r8), allocatable :: xallo(:) 
     integer(kind=i4), allocatable :: iplalln(:),jplalln(:),ipralln(:),jpralln(:)	
     real(kind=r8), allocatable :: xalln(:)  
-    real(kind=r8), allocatable :: xtotnow(:)
-    integer(kind=i4), allocatable :: iplnow(:),jplnow(:),iprnow(:),jprnow(:)	
-    logical :: supermode ! true = turn on the big ram read in mode.
-    logical :: loaded,finished,loadmore,loadextra,loadedextra
+    logical :: loaded,loadmore,loadextra,loadedextra
     
     ixtemp=3*npart*(nchorizo+1)    
     if (ixtemp /= ixtempo) then
@@ -5422,20 +5257,14 @@ contains
     use random
     use brut
     use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,rankl,rankr
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
+    real(kind=r8) :: rm,rmsq
+    real(kind=r8) :: v(0:nchorizo) &
+	                ,x0totin(3,npart,0:nchorizo)
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout
+    integer(kind=i4) :: i,rankl,rankr,icheck
+    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rf,vnum,vdenom
     real(kind=r8) :: psi20,psi2n
-    complex(kind=r8) :: f
     integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
  
 ! init   
     call chorizoallin(x0totin)
@@ -5505,31 +5334,19 @@ contains
     use random
     use brut
     use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,iin
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n,valn,val2,err2,val1,err1,error
-    complex(kind=r8) :: f
-    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+    integer(kind=i4) :: j,k,iin
+    real(kind=r8) :: val2,err2,val1,err1,error
     real(kind=r8), allocatable :: rhodist(:),rhodisterr(:)
     real(kind=r8), allocatable :: valnow(:),valaverage(:),valerr(:)
     character(len=30) :: vpropchorizo
 
     call update   !collect block averages
     call updateristra
-    answer=resstring()
       
     if (myrank().eq.0) then   
         write (6,*) 'path #: ', iin 
-	    write (12,*) 'path #: ', iin     
+	    write (12,*) 'path #: ', iin  
+        answer=resstring()
         write (6,'(a120)') (answer(k),k=1,size(answer))
 	    write (12,'(a120)') (answer(k),k=1,size(answer))  
     endif    
@@ -5551,7 +5368,7 @@ contains
     allocate(valnow(0:nchorizo),valaverage(0:nchorizo),valerr(0:nchorizo))
     call resultristra(1,valnow,valaverage,valerr,vpropchorizo)
     open(unit=33,form='formatted',file=vpropchorizo)
-    call result(4,valn,val2,err2) ! #4 is the denominator 
+    call resultest(4,val2,err2) ! #4 is the denominator 
     do j=0,nchorizo
         val1=valaverage(j)
         err1=valerr(j)  
@@ -5568,28 +5385,9 @@ contains
     end subroutine computeupdate  
     
     subroutine computeinit(answerin,rhobinsizein) ! call it before call compute
-    use estimator
-    use estimatorristra
-    use wavefunction
-    use random
-    use brut
     use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n,rhobinsizein
-    complex(kind=r8) :: f
-    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
     character(len=120) :: answerin(:)
-    
+    real(kind=r8) :: rhobinsizein
 
     allocate(answer(size(answerin)))
     rhobinsize=rhobinsizein 
@@ -5622,7 +5420,7 @@ contains
     
     
 
-!!!!!!!!!!!! this part is just to check m6matrix !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
+!!!!!!!!!!!! this part is just to check v6 matrix !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
 !    subroutine checkv6mat(x,psi2,psi2a)
 !!  make sure this subroutine is called after some initializaiotn.
 !    use matrixmod

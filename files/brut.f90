@@ -131,7 +131,7 @@ contains
       use mympi
       use math
 	  real(kind=r8) :: hbarin
-	  integer(kind=i4) :: npartin,nprotin,lpotin
+	  integer(kind=i4) :: npartin,nprotin
 	  integer(kind=i4) :: i,irn(4)
 	  logical :: iemin
 
@@ -230,9 +230,9 @@ contains
       integer(kind=i4) :: ip(npair),jp(npair)
       real(kind=r8) :: fc,fs,fi,fsi,ft,fti
       equivalence (fop(1),fc),(fop(2),fs),(fop(3),fi),(fop(4),fsi),(fop(5),ft),(fop(6),fti)
-      integer(kind=i4) :: k,l,mn,mo,ii,i,j,ispin,ic,jspin,kspin,lspin,ifsgni,jfsgni,maskex,jiexi &
+      integer(kind=i4) :: k,l,mn,mo,ii,i,j,ispin,jspin,kspin,lspin,ifsgni,jfsgni,maskex,jiexi &
 		                 ,iflps,jflps,jiflps,ifsgn,jfsgn,jiexs,m1
-      real(kind=r8) :: rij,riji,si,sj,zi,zj
+      real(kind=r8) :: rij,si,sj,zi,zj
       real(kind=r8) :: fceff,fsex,fiex,fsiex,fteff,ftieff
 !     integer(kind=i4) shiftl,shiftr,xor,and,or
 !
@@ -421,11 +421,11 @@ contains
       complex(kind=r8) :: xif(n2p),xjf(n2p)
       complex(kind=r8) :: cwta(n2p,0:nspin-1,nisospin),wt(n2p,0:nspin-1,nisospin,2),wtx(n2p)
       real(kind=r8) :: x(3,n),dx(n2p,3),dxri(n2p,3) &
-       ,rij(n2p),zi(n2p),zj(n2p),riji(n2p) &
+       ,rij(n2p),zi(n2p),zj(n2p) &
        ,xa(n2p,3,4),fop(6,n2p),fceff(n2p),fsex(n2p),fiex(n2p) &
        ,fsiex(n2p),fteff(n2p),ftieff(n2p)
       integer(kind=i4) :: ip(npair),jp(npair)
-      integer(kind=i4) :: k,l,la,mn,mo,i,ic,ic1,i1,ii,j,ispin,jspin,kspin,lspin &
+      integer(kind=i4) :: k,l,la,mn,mo,i,ic,ii,j,ispin,jspin,kspin,lspin &
 		                 ,ifsgni,jfsgni,maskex,jiexi,iflps,jflps,jiflps,ifsgn,jfsgn,jiexs,m1
       real(kind=r8) :: dxx,si,sj
 !     integer(kind=i4) shiftl,shiftr,xor,and,or
@@ -685,9 +685,9 @@ contains
       complex(kind=r8) xif,xjf,pex,wtx
 	  complex(kind=r8) :: cwtl(0:nspin-1,nisospin),cwtr(0:nspin-1,nisospin)
       real(kind=r8) :: x(3,n),dx(3),dxri(3)
-      integer(kind=i4) :: i,im1,ispin,j,ic,jspin,l,lspin,k,kspin &
+      integer(kind=i4) :: i,im1,ispin,j,jspin,l,lspin,k,kspin &
 		                 ,ifsgni,jfsgni,maskex,jiexi,iflps,jflps,jiflps,ifsgn,jfsgn,jiexs,m1
-      real(kind=r8) :: rij,rij2,riji,si,sj,zi,zj,petot
+      real(kind=r8) :: rij,si,sj,zi,zj,petot
 	  real(kind=r8) :: vc,vs,vi,vsi,vt,vti,vb,vbi,vceff,vsex,viex,vsiex,vteff,vtieff
 !
 ! vms vax and pc booleans
@@ -786,7 +786,7 @@ contains
 
       subroutine empecal(x,cwtl,cwtr,empetot)
       complex(kind=r8) :: cwtl(0:nspin-1,nisospin),cwtr(0:nspin-1,nisospin)
-      real(kind=r8) :: x(3,n),dx(3),dxri(3),vem(14),vem2(14),emtot,r,empetot
+      real(kind=r8) :: x(3,n),dx(3),vem(14),emtot,r,empetot
 	  integer(kind=i4) :: l,lspin,i,j,ipi,ipj
          
       do l=1,nisospin
@@ -799,12 +799,7 @@ contains
              ipi=(2*(and(1,shiftr(lspin,i-1))))/2
              ipj=(2*(and(1,shiftr(lspin,j-1))))/2  
              if ((ipi*ipj).eq.1) then
-              call empot(2,r,vem) ! only pp simpliest coulomb here.
-			  
-			  !call empotmod(0,one,one,r,vem2)
-			  !write(6,*) 'vem, vem2 are', vem(1),vem2(1)
-			  !if ( abs(vem(1)-vem2(1)).gt.1.d-5 ) stop
-			  
+              call empot(2,r,vem) ! only pp simpliest coulomb here.			  
               emtot=emtot+vem(1) 
              endif          
           enddo       
@@ -1016,7 +1011,7 @@ contains
 	    
       subroutine sngchn(f01)
       real(kind=r8), parameter :: small=1.d-8      
-      real(kind=r8) :: f00(ngrid),f01(ngrid)
+      real(kind=r8) :: f01(ngrid)
 !
 ! subroutine to solve single channel equation for s=0 t=1
 !
@@ -1083,7 +1078,6 @@ contains
 	  	  
       subroutine potchn(v00,v01,v10,v11,vt0,vt1,vb0,vb1,r)
       real(kind=r8) :: v00,v01,v10,v11,vt0,vt1,vb0,vb1
-	  integer(kind=i4) :: i,j
 	  real(kind=r8) :: r,rx,vc,vs,vi,vsi,vt,vti,vb,vbi  
       rx=r
 !
@@ -1106,7 +1100,7 @@ contains
 	  end
 	  
       subroutine potmod (vc,vs,vi,vsi,vt,vti,vb,vbi,r)
-      real(kind=r8) :: vv(18),ww(14),vp(12)
+      real(kind=r8) :: vv(18)
       real(kind=r8) :: vc,vs,vi,vsi,vt,vti,vb,vbi,r
       !call pot(0,r,vv,vp,ww)
 	  call av18op(3,r,vv)  ! 3 is v6'
@@ -1131,11 +1125,11 @@ contains
 ! subroutine to calculate the values of psi e pe and grad psi
 ! given positions and order of correlations
 !
-      real(kind=r8) :: x(3,n),d2(3,n),ff(3,n),fd(3,n),d2d(3,n),fj(3,n),d2j(3,n),x0(3,n)
+      real(kind=r8) :: x(3,n),d2(3,n)
       complex(kind=r8) :: cwta(n2p,0:nspin-1,nisospin),cwtl(0:nspin-1,nisospin),cwtr(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
-      integer(kind=i4) :: ip(npair),jp(npair),ipl(npair),ipr(npair),jpl(npair),jpr(npair) ! should be 6 i think.
-	  real(kind=r8) :: xcm,psi2,e,ke,pe,vj,empe,vjp,vjm
-	  integer(kind=i4) ::  ic,i,l,k,kspin,la      
+      integer(kind=i4) :: ip(npair),jp(npair)! should be 6 i think.
+	  real(kind=r8) :: xcm,e,ke,pe,vj,empe,vjp,vjm
+	  integer(kind=i4) ::  ic,i,la      
 !
 ! calculate wave functions on left and right
 
@@ -1145,11 +1139,6 @@ contains
       enddo
       cwtl=cwt
       call coropv(x,ip,jp,dxke,cwta)
-      
-      !call corop(x,ip,jp,cwtl) ! need to comment.  
-      !write(6,'( ''cwtl ='', 12(g15.7,1x) )') cwtl
-      !write(6,'( ''cwta ='', 12(g15.7,1x) )') cwta(1,:,:)
-      !write(6,'( ''cwta - cwtl ='', 12(g15.7,1x) )') cwta(1,:,:)-cwtl
        
       vj=sum(conjg(cwtl(:,:))*cwta(1,:,:))  ! this is psi2 which is conjg(cwt)*psitcwt, real part
 !
@@ -1182,21 +1171,11 @@ contains
 
       subroutine vpsitcwt(x,ip,jp,cwt,pe) ! it changes x.
       real(kind=r8), parameter :: dxx=.02d0 
-      real(kind=r8) :: x(3,n),d2(3,1),ff(3,1),fd(3,4),d2d(3,4),fj(3,4),d2j(3,4)
+      real(kind=r8) :: x(3,n)
       complex(kind=r8) :: cwta(n2p,0:nspin-1,nisospin),cwtl(0:nspin-1,nisospin),cwtr(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
-      integer(kind=i4) :: ip(npair),jp(npair),ipl(npair),ipr(npair),jpl(npair),jpr(npair) ! should be 6 i think.
-	  real(kind=r8) :: xcm,psi2,e,pe,vj,empe,vjp,vjm
-	  integer(kind=i4) ::  ic,i,l,k,kspin,la
-   
-!      do 200 ic=1,3
-!      xcm=zero
-!      do 210 i=1,n
-!  210 xcm=xcm+x(ic,i)
-!      xcm=xcm/n
-!      do 220 i=1,n
-!  220 x(ic,i)=x(ic,i)-xcm
-!200   continue
-  
+      integer(kind=i4) :: ip(npair),jp(npair)! should be 6 i think.
+	  real(kind=r8) :: xcm,pe
+	  integer(kind=i4) ::  ic,l,k
       
      do ic=1,3 
         xcm=sum(x(ic,:))/n
@@ -1221,10 +1200,10 @@ contains
 ! given positions and order of correlations
 !
       real(kind=r8) :: x(3,n)
-      complex(kind=r8) :: cwta(n2p,0:nspin-1,nisospin),cwtl(0:nspin-1,nisospin),cwtr(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
-      integer(kind=i4) :: ip(npair),jp(npair),ipl(npair),ipr(npair),jpl(npair),jpr(npair) ! should be 6 i think.
+      complex(kind=r8) :: cwta(n2p,0:nspin-1,nisospin),cwtl(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+      integer(kind=i4) :: ip(npair),jp(npair) ! should be 6 i think.
 	  real(kind=r8) :: xcm,psi2,vj
-	  integer(kind=i4) ::  ic,i,l,k,kspin,la
+	  integer(kind=i4) ::  ic,l,k,kspin
     
 !      do 200 ic=1,3
 !      xcm=zero

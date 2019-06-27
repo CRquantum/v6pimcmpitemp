@@ -109,7 +109,7 @@ contains
 ! set the seed
 !
    integer(kind=i8) :: irnin
-   integer(kind=i8), dimension(1) :: iseed
+   !integer(kind=i8), dimension(1) :: iseed
    irn=iand(irnin,mask48)
    !iseed=irnin
    !call RANDOM_SEED(PUT=iseed) ! set the internal ran function's seed.

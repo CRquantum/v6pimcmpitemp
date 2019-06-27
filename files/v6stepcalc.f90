@@ -34,9 +34,9 @@ contains
 	  use v6pot
       use mympi
 	  real(kind=r8) :: dtin,hbarin,rangevin,dr
-	  integer(kind=i4) :: npartin,nprotin,mmaxin,nbisectin,ntabin,nrepmaxin
+	  integer(kind=i4) :: npartin,nprotin,mmaxin,ntabin,nrepmaxin
 	  real(kind=r8) :: v(6),e(6) ! v(6) should already absorbed the stime step dt. 
-	  integer(kind=i4) :: i,j,k,ibox,lpot,lpotpr,irepin
+	  integer(kind=i4) :: i,j,ibox,lpot,lpotpr,irepin
       real(kind=r8) :: vfact(8)   
 	  logical :: iemin
 	  irep=irepin
@@ -181,7 +181,7 @@ contains
       subroutine spinit(npartin,nprotin) ! give initial weight of 96 states by cwtgnd
 	  use math
       real(kind=r8) :: si
-	  integer(kind=i4) :: npartin,nprotin,nisospinin,ineut
+	  integer(kind=i4) :: npartin,nprotin,ineut
 	  integer(kind=i4) :: iispin,ispin,nstate
       real(kind=r8), parameter :: zero=0.d0,one=1.d0,two=2.d0,three=3.d0,four=4.d0 &
                                  ,five=5.d0,six=6.d0,seven=7.d0,eight=8.d0,nine=9.d0 &
@@ -296,17 +296,15 @@ contains
 	return
 	end subroutine getcwtgnd2
 	  
-	subroutine op1(i,j,nstate,cwtnew) ! op1=1
-	integer(kind=i4) :: i,j,nstate,nsp,niso
-	complex(kind=r8) :: cwto
+	subroutine op1(nstate,cwtnew) ! op1=1
+	integer(kind=i4) :: nstate
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin)
 	cwtnew=0
 	cwtnew(invspin(nstate),invispin(nstate))=1
 	end subroutine op1
 		
 	subroutine op2(i,j,nstate,cwtnew) ! op2 = sigma i dot sigma j
-	integer(kind=i4) :: i,j,nstate,nsp,niso,sign,spn,newspn,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,nstate,spn,newspn,signi,signj
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin)
 	cwtnew=0
 	spn=invspin(nstate) ! spn, 0:15.
@@ -324,8 +322,7 @@ contains
 ! can check op2 with 2opexsigma-1. that should be slightly faster i think.
 	
 	subroutine op3(x,i,j,nstate,cwtnew) ! op3 = tensor op, make sure dx neq 0, otherwise need to add protection.
-	integer(kind=i4) :: i,j,nstate,nsp,niso,sign,spn,newspn,newspni,newspnj,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,nstate,spn,newspn,newspni,newspnj,signi,signj
     real(kind=r8) :: r(3),x(3,npart),dx(3)
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin)
 	cwtnew=0
@@ -359,8 +356,7 @@ contains
 	end subroutine op3	
 			
 	subroutine op5(i,j,nstate,cwtnew) ! sigma i dot sigma j tau i dot tau j
-	integer(kind=i4) :: i,j,nstate,nstatenew,nstatenew1,nstatenew2,nstatenew3,nsp,niso,sign,spn,newspn,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,nstate,nstatenew1,nstatenew2,nstatenew3
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin)
 	cwtnew=0	
 	call opextau(i,j,nstate,nstatenew1)	
@@ -374,8 +370,7 @@ contains
 	end subroutine op5	  
 	    
 	subroutine op4(i,j,nstate,cwtnew) ! tau i dot tau j
-	integer(kind=i4) :: i,j,nstate,nstatenew,nstatenew1,nstatenew2,nstatenew3,nsp,niso,sign,spn,newspn,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,nstate,nstatenew1
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin)
 	cwtnew=0	
 	call opextau(i,j,nstate,nstatenew1)	
@@ -385,9 +380,8 @@ contains
 	end subroutine op4	  
 	
 	subroutine op6(x,i,j,nstate,cwtnew) ! op6 = tensor  tau i dot tau j
-	integer(kind=i4) :: i,j,nstate,nstatenew,nstatenew1,nstatenew2,nstatenew3,nsp,niso,sign,spn,newspn,signi,signj
-	complex(kind=r8) :: cwto
-    real(kind=r8) :: r(3),x(3,npart)
+	integer(kind=i4) :: i,j,nstate,nstatenew1
+    real(kind=r8) :: x(3,npart)
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
 	cwtnew=0
 	call opextau(i,j,nstate,nstatenew1)	
@@ -398,8 +392,7 @@ contains
 	end subroutine op6		
 !   
 	subroutine opexsigma(i,j,nstate,nstatenew) ! spin exchange, I think this is the fastest.
-	integer(kind=i4) :: i,j,iv,jv,nstate,nstatenew,nsp,niso,sign,spn,newspn,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,iv,jv,nstate,nstatenew,spn,newspn
 	!cwtnew=0.
 	spn=invspin(nstate) ! spn, 0:15.
 	iv=shiftr(and(spn,shiftl(1,i-1)),i-1)
@@ -414,7 +407,7 @@ contains
 	subroutine opexsigma1sumbasis(i,j,cwtold,cwtnew)
 	integer(kind=i4) :: i,j,is	
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0.
 	do is=1,nbasis
 		 call opexsigma1(i,j,is,cwtnew1) 
@@ -425,8 +418,7 @@ contains
 	
 	subroutine opexsigmasumbasis(i,j,cwtold,cwtnew)
 	integer(kind=i4) :: i,j,is,in
-    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) 
 	cwtnew=0
 	do is=1,nbasis
 		 call opexsigma(i,j,is,in) 
@@ -440,8 +432,7 @@ contains
 	
 	
 	subroutine opexsigma0(i,j,nstate,nstatenew) ! spin exchange with if then else 
-	integer(kind=i4) :: i,j,iv,jv,nstate,nstatenew,nsp,niso,sign,spn,newspn,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,iv,jv,nstate,nstatenew,spn,newspn
 	!cwtnew=0.
 	spn=invspin(nstate) ! spn, 0:15.
 	iv=shiftr(and(spn,shiftl(1,i-1)),i-1)
@@ -459,8 +450,7 @@ contains
 	end subroutine opexsigma0
 	
 	subroutine opexsigma1(i,j,nstate,cwtnew) ! spin exchange, use op2, haven't check. may be slow.
-	integer(kind=i4) :: i,j,nstate,nstatenew,nsp,niso,sign,spn,newspn,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,nstate,spn,newspn,signi,signj
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin)
 	!call op2(i,j,nstate,1.,cwtnew)
 	cwtnew=0
@@ -480,8 +470,7 @@ contains
 	end subroutine opexsigma1
 	
 	subroutine opextau(i,j,nstate,nstatenew) ! tau exchange 
-	integer(kind=i4) :: i,j,iv,jv,nstate,nstatenew,nsp,niso,sign,ispn,newispn,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,iv,jv,nstate,nstatenew,ispn,newispn
 	!cwtnew=0.
 	ispn=liso(invispin(nstate)) 
 	iv=shiftr(and(ispn,shiftl(1,i-1)),i-1)
@@ -494,8 +483,7 @@ contains
 	end subroutine opextau  
 	  
 	subroutine opextau0(i,j,nstate,nstatenew) ! tau exchange with if then else
-	integer(kind=i4) :: i,j,iv,jv,nstate,nstatenew,nsp,niso,sign,ispn,newispn,signi,signj
-	complex(kind=r8) :: cwto
+	integer(kind=i4) :: i,j,iv,jv,nstate,nstatenew,ispn,newispn
 	!cwtnew=0.
 	ispn=liso(invispin(nstate)) 
 	iv=shiftr(and(ispn,shiftl(1,i-1)),i-1)
@@ -512,13 +500,13 @@ contains
 	return
 	end subroutine opextau0	
 !	
-	subroutine op1sumbasis(i,j,cwtold,cwtnew)
-	integer(kind=i4) :: i,j,is	
+	subroutine op1sumbasis(cwtold,cwtnew)
+	integer(kind=i4) :: is	
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0
 	do is=1,nbasis
-		 call op1(i,j,is,cwtnew1) 
+		 call op1(is,cwtnew1) 
 		 cwtnew=cwtnew+cwtnew1*cwtold(invspin(is),invispin(is))
 	enddo 
 	return
@@ -527,7 +515,7 @@ contains
 	subroutine op2sumbasis(i,j,cwtold,cwtnew)
 	integer(kind=i4) :: i,j,is	
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0
 	do is=1,nbasis
 		 call op2(i,j,is,cwtnew1) 
@@ -537,11 +525,10 @@ contains
 	end subroutine op2sumbasis
 	
 	subroutine op3sumbasis(x,i,j,cwtold,cwtnew)
-	integer(kind=i4) :: i,j,is,k
-    real(kind=r8) :: r(3),x(3,npart)
+	integer(kind=i4) :: i,j,is
+    real(kind=r8) :: x(3,npart)
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		               ,cwtnews(0:nspin-1,nisospin,nbasis)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0
 	do is=1,nbasis
 		call op3(x,i,j,is,cwtnew1) 
@@ -561,7 +548,7 @@ contains
 	subroutine op4sumbasis(i,j,cwtold,cwtnew)
 	integer(kind=i4) :: i,j,is	
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0
 	do is=1,nbasis
 		 call op4(i,j,is,cwtnew1) 
@@ -573,7 +560,7 @@ contains
 	subroutine op5sumbasis(i,j,cwtold,cwtnew)
 	integer(kind=i4) :: i,j,is	
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0.
 	do is=1,nbasis
 		 call op5(i,j,is,cwtnew1) 
@@ -584,9 +571,9 @@ contains
 	
 	subroutine op6sumbasis(x,i,j,cwtold,cwtnew)
 	integer(kind=i4) :: i,j,is	
-    real(kind=r8) :: r(3),x(3,npart)
+    real(kind=r8) :: x(3,npart)
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0
 	do is=1,nbasis
 		 call op6(x,i,j,is,cwtnew1) 
@@ -597,12 +584,12 @@ contains
 	
 	subroutine v6prop1(x,i,j,u,cwtold,cwtnew)
 	integer(kind=i4) :: i,j	
-    real(kind=r8) :: r(3),x(3,npart)
+    real(kind=r8) :: x(3,npart)
 	real(kind=r8) :: u(6) ! v6 so 6, coefficients after conversion. check if real or complex, I think real.
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0
-	call op1sumbasis(i,j,cwtold,cwtnew1)
+	call op1sumbasis(cwtold,cwtnew1)
 	cwtnew=cwtnew+cwtnew1*u(1)
 	call op2sumbasis(i,j,cwtold,cwtnew1)
 	cwtnew=cwtnew+cwtnew1*u(2)
@@ -619,12 +606,12 @@ contains
 
     subroutine v6prop1schmidt(x,i,j,u,cwtold,cwtnew)
 	integer(kind=i4) :: i,j	
-    real(kind=r8) :: r(3),x(3,npart)
+    real(kind=r8) :: x(3,npart)
 	real(kind=r8) :: u(6) ! v6 so 6, coefficients after conversion. check if real or complex, I think real.
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	cwtnew=0
-	call op1sumbasis(i,j,cwtold,cwtnew1)
+	call op1sumbasis(cwtold,cwtnew1)
 	cwtnew=cwtnew+cwtnew1*u(1)
 	call op2sumbasis(i,j,cwtold,cwtnew1)
 	cwtnew=cwtnew+cwtnew1*u(2)
@@ -642,8 +629,7 @@ contains
 	subroutine vemprop1(r,i,j,it,cwtold,cwtnew)
 	integer(kind=i4) :: i,j,l,it,lspin,ipi,ipj
 	real(kind=r8) :: vem(14),emtot,r
-	complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+	complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin)
 	cwtnew=cwtold
 	
 	if (irep.eq.4) return
@@ -665,11 +651,10 @@ contains
 	integer(kind=i4) :: i,j,it,index	
 	real(kind=r8) :: x(3,npart) ! the configuration for the system
     real(kind=r8), dimension(3) :: dx
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep ! tstep=dt*2**it
+    real(kind=r8) :: r,c1,c2,c3,c4,dr
 	real(kind=r8) :: u(6)
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		               ,cwt1(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)
 	
 	if (irep.eq.4) then
 	   cwtnew=cwtold ! because for vmc, dt=0.	
@@ -745,11 +730,10 @@ contains
 	integer(kind=i4) :: i,j,it,index	
 	real(kind=r8) :: x(3,npart) ! the configuration for the system
     real(kind=r8), dimension(3) :: dx
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep ! tstep=dt*2**it
+    real(kind=r8) :: r,c1,c2,c3,c4,dr
 	real(kind=r8) :: u(6)
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		               ,cwt1(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)
 	
 	if (irep.eq.4) then
 	   cwtnew=cwtold ! because for vmc, dt=0.	
@@ -824,11 +808,10 @@ contains
 	integer(kind=i4) :: i,j,it,index	
 	real(kind=r8) :: x(3,npart)
     real(kind=r8), dimension(3) :: dx
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep ! tstep=dt*2**it
+    real(kind=r8) :: r,c1,c2,c3,c4,dr
 	real(kind=r8) :: u(6)
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		               ,cwt1(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)
 
 	if (irep.eq.4) then
 	   cwtnew=cwtold ! because for vmc, dt=0.	
@@ -891,11 +874,10 @@ contains
 	integer(kind=i4) :: i,j,it,index	
 	real(kind=r8) :: x(3,npart)
     real(kind=r8), dimension(3) :: dx
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep ! tstep=dt*2**it
+    real(kind=r8) :: r,c1,c2,c3,c4,dr
 	real(kind=r8) :: u(6)
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		               ,cwt1(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)
 	
 	if (irep.eq.4) then
 	   cwtnew=cwtold ! because for vmc, dt=0.	
@@ -958,7 +940,7 @@ contains
 	integer(kind=i4) :: it
 	real(kind=r8) :: xl(3,npart),xr(3,npart) 
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	if (irep.eq.4) then
 	   cwtnew=cwtold ! because for vmc, dt=0.	
 	   return	
@@ -972,7 +954,7 @@ contains
 	integer(kind=i4) :: it
 	real(kind=r8) :: xl(3,npart),xr(3,npart) 
     complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin)
+		               ,cwtnew1(0:nspin-1,nisospin)
 	if (irep.eq.4) then
 	   cwtnew=cwtold ! because for vmc, dt=0.	
 	   return	
@@ -983,14 +965,12 @@ contains
     end subroutine v6proplr    	
        
 	subroutine v6val(x,cwtold,cwtnew)
-	integer(kind=i4) :: i,j,it,index	
+	integer(kind=i4) :: i,j,index	
 	real(kind=r8) :: x(3,npart) ! the configuration for the system
     real(kind=r8), dimension(3) :: dx
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep ! tstep=dt*2**it
-	real(kind=r8) :: u(6),v(6)
-    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		               ,cwt1(0:nspin-1,nisospin)	
+    real(kind=r8) :: r,c1,c2,c3,c4,dr
+	real(kind=r8) :: v(6)
+    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)	
 	cwtnew=0
 	do i=1,npart-1
 		do j=i+1,npart
@@ -1020,11 +1000,9 @@ contains
 	integer(kind=i4) :: i,j,n,index	
 	real(kind=r8) :: x(3,npart) ! the configuration for the system
     real(kind=r8), dimension(3) :: dx
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep ! tstep=dt*2**it
-	real(kind=r8) :: u(6),v(6)
-    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		               ,cwt1(0:nspin-1,nisospin)	
+    real(kind=r8) :: r,c1,c2,c3,c4,dr
+	real(kind=r8) :: v(6)
+    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)	
 	cwtold=0
     cwtold(invspin(n),invispin(n))=1
 	cwtnew=0.
@@ -1057,14 +1035,12 @@ contains
 	
 	subroutine psitprop(x,cwtold,cwtnew) ! Schmidt order.
 	use brut
-	integer(kind=i4) :: i,j,it,index,k	
+	integer(kind=i4) :: i,j,k	
 	real(kind=r8) :: x(3,npart) ! the configuration for the system
     real(kind=r8), dimension(3) :: dx
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep ! tstep=dt*2**it
-	real(kind=r8) :: u(6),fop(6)
-    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		               ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		               ,cwt1(0:nspin-1,nisospin)
+    real(kind=r8) :: r
+	real(kind=r8) :: fop(6)
+    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)
 	integer :: ipl(6),jpl(6),ipr(6),jpr(6)
 	
 	cwt1=cwtold

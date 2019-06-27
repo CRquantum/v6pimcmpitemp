@@ -89,7 +89,7 @@ c ----------------------------------------------------------------------
       implicit integer (i-n)
       dimension vv(18),vp(12),vw(14)
       real*8 mpi0,mpic,mpi,mpis,mpiq,mp,mn,mu0,muc,mu,mus,muq
-      real*8 krho,komg,lam,lamp,lamw,mrho,momg,murho,muomg
+      real*8 krho,komg,mrho,murho
       dimension pm0(12),pm1(12)
      &,pgva01(12),pgva11(12),pgva00(12),pgva10(12)
      &,pgvb01(12),pgvb11(12),pgvb00(12),pgvb10(12)
@@ -1224,7 +1224,7 @@ c ----------------------------------------------------------------------
       implicit integer (i-n)
       dimension vem(14)
       real*8 kr,me,mp,mn,mr,mun,mup
-      data small/1e-4/,vsmall/1e-10/
+      data small/1e-4/
       alpha=ems/137.03599
       hc=197.327053
       b=4.27

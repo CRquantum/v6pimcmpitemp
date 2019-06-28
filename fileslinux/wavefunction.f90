@@ -24,15 +24,10 @@ module wavefunction
 contains
     subroutine wavefunctioninit(nchorizoin,npartin,nprotin,ntabin &
                 ,hbarin,rangevin,rangerhoin,nrhobinin,irepin)
-    ! need to add a,b,d 
     use math
     integer(kind=i4) :: npartin,ntabin,nrhobinin,irepin,nchorizoin,nprotin
-    real(kind=r8) :: elin,rangein,hbarin,ain,bin,din,rangevin,rangeuin,rangerhoin
-    ! external jastrow,vpot
-    integer(kind=i4) :: i,j,k,ic
-    real(kind=r8) dr,r
-    real(kind=r8) vintp,uintp,vexct,verr
-    integer(kind=i4) :: ntabmore
+    real(kind=r8) :: hbarin,rangevin,rangerhoin
+    
     nchorizo=nchorizoin
 
     hbar=hbarin
@@ -71,19 +66,15 @@ contains
     end subroutine zerrhodist
 	  
     subroutine funcrmsq(x,rm,rmsq) 
-    real(kind=r8), dimension(3,npart) :: x,f
-    real(kind=r8) :: u,df,d2psi,v,val,rm,rmsq
-    integer(kind=i4) :: i,j,k,l,dim,ib,jb,is,js,jbmax,index
-    real(kind=r8), dimension(3) :: dx,sumcor,rc
-    real(kind=r8) :: r,dr,duu,c1,c2,c3,c4   
-        !  funcRMSQ=(x1-(x1+x2+x3+x4)/4.)**2
-        !& +(y1-(y1+y2+y3+y4)/4.)**2
-        !& +(z1-(z1+z2+z3+z4)/4.)**2 
+    real(kind=r8), dimension(3,npart) :: x
+    real(kind=r8) :: rm,rmsq
+    integer(kind=i4) :: l
+    real(kind=r8), dimension(3) :: rc 
     do l=1,3   
 	    rc(l)=sum(x(l,:))/4
     enddo
-	    rmsq=sum((x(:,1)-rc(:))**2)
-	    rm=sqrt(rmsq)
+	rmsq=sum((x(:,1)-rc(:))**2)
+	rm=sqrt(rmsq)
     return
     end subroutine funcrmsq
    
@@ -91,11 +82,11 @@ contains
     !,rhodistout,rhodisterrout) ! i is the picked the bead
     use mympi
     real(kind=r8), PARAMETER :: pi=4.0_r8*atan(1.0_r8) 
-    real(kind=r8), dimension(3,npart) :: x,f
+    real(kind=r8), dimension(3,npart) :: x
     real(kind=r8) :: r,xnk,xkh1,xkh2,basis_k
-    integer(kind=i4) :: i,j,k,l,iknum
-    real(kind=r8), dimension(3) :: dx,sumcor,rc 
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodistnow,rhodisterrout,rhodistnowout
+    integer(kind=i4) :: i,l,iknum
+    real(kind=r8), dimension(3) :: rc 
+    real(kind=r8), dimension(0:nrhobin) :: rhodistnow,rhodistnowout
    
     rhodistnow=0
     rhodistnowout=0
@@ -137,8 +128,7 @@ contains
     subroutine updaterhodistrbt(rhodistout,rhodisterrout,i) 
     use mympi
     integer(kind=i4) :: i
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodistall,rhodisterrout,rhodisterrall &
-                                            ,rhodistottall,rhodist2totall
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodistall,rhodisterrout,rhodisterrall 
     real(kind=r8), dimension(0:nchorizo) :: wtrhodistsum,av,av2
     real(kind=r8), dimension(0:nrhobin,0:nchorizo) :: rhodistsum,rhodist2sum
    
@@ -148,25 +138,30 @@ contains
         call addall(rhodistblk(:,i),rhodistsum(:,i))
         call addall(rhodist2blk(:,i),rhodist2sum(:,i))
      
-        if (myrank().eq.0) then
-         
-           wtrhodistblk(i)=wtrhodistsum(i) 
-           rhodistblk(:,i)=rhodistsum(:,i) 
-           rhodist2blk(:,i)=rhodist2sum(:,i) 
+        if (myrank().eq.0) then     
+            wtrhodistblk(i)=wtrhodistsum(i) 
+            rhodistblk(:,i)=rhodistsum(:,i) 
+            rhodist2blk(:,i)=rhodist2sum(:,i) 
                        
-           wtrhodisttot(i)=wtrhodisttot(i)+wtrhodistblk(i)
-           rhodisttot(:,i)=rhodisttot(:,i)+rhodistblk(:,i)
-           rhodist2tot(:,i)=rhodist2tot(:,i)+rhodist2blk(:,i)
+            wtrhodisttot(i)=wtrhodisttot(i)+wtrhodistblk(i)
+            rhodisttot(:,i)=rhodisttot(:,i)+rhodistblk(:,i)
+            rhodist2tot(:,i)=rhodist2tot(:,i)+rhodist2blk(:,i)
    
-        rhodistout(:)=rhodisttot(:,i)/wtrhodisttot(i)
-        av=rhodistout
-        if (wtrhodisttot(i) /= 0 ) then
-            av2=rhodist2tot(:,i)/wtrhodisttot(i) 
-        else
-            av2=0
-        endif   
-        rhodisterrout(:)=sqrt(abs(av2(:)-av(:)**2)/max(1.0_r8,wtrhodisttot(i)-1))        
-      endif
+            if (wtrhodisttot(i)/=0) then
+                rhodistout(:)=rhodisttot(:,i)/wtrhodisttot(i)
+            else
+                rhodistout(:)=0
+            endif
+            
+            av=rhodistout
+            
+            if (wtrhodisttot(i) /= 0 ) then
+                av2=rhodist2tot(:,i)/wtrhodisttot(i) 
+            else
+                av2=0
+            endif   
+            rhodisterrout(:)=sqrt(abs(av2(:)-av(:)**2)/max(1.0_r8,wtrhodisttot(i)-1))        
+        endif
         wtrhodistblk(i)=0 
         rhodistblk(:,i)=0
         rhodist2blk(:,i)=0

@@ -182,9 +182,11 @@ contains
     return
     end subroutine chorizoallout   
    
-    subroutine stepchorizoinit(isitein,infilein,outfilein) ! initialize the position, calculate the weights for each bead. l2r,r2l
+    subroutine stepchorizoinit(isitein,infilein,outfilein) ! call stepinit first
+! initialize the position, calculate the weights for each bead. l2r,r2l
     use wavefunction
     use v6stepcalc
+    use estimator
     use random
     use brut
     use mympi
@@ -195,11 +197,13 @@ contains
     character(len=70) :: infilein,outfilein  
     logical :: isitein
     real(kind=r8) :: psi20,psi2n
-    real(kind=r8) :: vn,vd,rf,vnke,vnpev6,vnpeem
+    real(kind=r8) :: vn,vd,rf,vnke,vnpev6,vnpeem,vnum,vdenom,rm,rmsq
     real(kind=r8), parameter :: dxx=.02d0  
     integer(kind=i4), allocatable :: icheck1d(:)
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout
+    character(len=120), dimension(:), allocatable :: answer
    
     ! call stepinit first   
     isite=isitein
@@ -335,14 +339,37 @@ contains
         enddo 
         close(9)  
         write(6,*) 'check hpsi fail! Bug x recorded in outfile! use hpsi to check!'
-        call abort         
+        call abort 
      else
-        write(6,*) 'hpsi pass!'       
+        write (6,'(/,''hpsi check pass!'')') 
+	    write (12,'(/,''hpsi check pass!'')')          
      endif  
      deallocate(icheck1d)
      deallocate(xall,iplall,jplall,iprall,jprall)     
     endif
     
+    call zerest
+    call zerrhodist     
+    vnum=vn
+    vdenom=vd
+    call addval(3,vnum,1.0_r8)
+    call addval(4,vdenom,1.0_r8)
+    call addval(5,rf,1.0_r8)
+    call funcrmsq(ristra(nchorizomid)%x,rm,rmsq)
+    call addval(6,rmsq,1.0_r8)
+    call addval(7,rm,1.0_r8)
+    call samplerhodistrbt(ristra(nchorizomid)%x,nchorizomid,rhodistout)	  
+    call addval(8,rhodistout(0),1.0_r8)    
+    call update   !collect block averages
+    if (myrank().eq.0) then
+        allocate(answer(11))
+        answer=resstring()
+        write (6,'(a120)') (answer(k),k=1,size(answer))
+	    write (12,'(a120)') (answer(k),k=1,size(answer)) 
+        deallocate(answer)
+        write (6,'(/,''initial config calculated.'')') 
+	    write (12,'(/,''initial config calculated.'')')    
+    endif    
     return
     end subroutine stepchorizoinit 
    
@@ -427,7 +454,7 @@ contains
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
 ! set rate parameters for different kind of moves.    
-    real(kind=r8), parameter :: rb=0.9 ! 0.9   bisection rate(reptation if enabled is in it.)
+    real(kind=r8), parameter :: rb=1 ! 0.9   bisection rate(reptation if enabled is in it.)
     real(kind=r8), parameter :: r1=0.95 ! move 1 by 1    
     real(kind=r8), parameter :: r2=0.967 ! move all beads  
     real(kind=r8), parameter :: r3=0.984 ! shift beads
@@ -1039,124 +1066,148 @@ contains
 
     subroutine bisect
     use random
-    integer(kind=i4) :: ileftbisect,irightbisect
- 
+    !real(kind=r8) :: rn(1)
+    integer(kind=i4) :: ileftbisect,irightbisect,mmaxnow,mmaxnow2
+    
     icbisecttot=icbisecttot+1   
    
     if (nbisect.lt.nchorizo) then
-    call bisectpicksliceswide(ileftbisect,irightbisect) ! pick the ileftbisect here
+        
+        mmaxnow=mmax
+        
+        call bisectpicksliceswide(ileftbisect,irightbisect) ! pick the ileftbisect here
     
-        !write(12,*) 'ileft,iright=', ileftbisect,irightbisect,nbisect,nbisecthalf
-        !write(6,*) 'ileft,iright=', ileftbisect,irightbisect,nbisect,nbisecthalf
+            !write(12,*) 'ileft,iright=', ileftbisect,irightbisect,nbisect,nbisecthalf
+            !write(6,*) 'ileft,iright=', ileftbisect,irightbisect,nbisect,nbisecthalf
     
-    if (ileftbisect.le.(nchorizo-nbisect)) then
+        if (ileftbisect.le.(nchorizo-nbisect)) then
      
-        !call bisectv6improve(ileftbisect)
-        !call bisectv6a(ileftbisect)
-        call bisectv6b(ileftbisect)
-        !write(6,*) 'bisectv6improve called =', ileftbisect
+            !call bisectv6improve(ileftbisect)
+            !call bisectv6a(ileftbisect)
+        
+        
+            !call bisectv6b(ileftbisect)
+            call bisectv6bflex(ileftbisect,mmaxnow)
+        
+            !write(6,*) 'bisectv6improve called =', ileftbisect
      
-    else
-
-        !rn=randn(1)
-        !if (rn(1) <= 0.5) then
-            call bisectv6lb   
-        !else
-            call bisectv6rb  
-        !endif
+        else
+            
+            !rn=randn(1)
+            !if (rn(1) < 0.5) then
+            !    call bisectv6lbflex(mmaxnow)  
+            !    call bisectv6rbflex(mmaxnow)    
+            !else
+            !    call bisectv6rbflex(mmaxnow)    
+            !    call bisectv6lbflex(mmaxnow)    
+            !endif
+        
+            
+            mmaxnow2=mmax-1    
+            if (  ileftbisect <= nchorizo-2**(mmax-1)  ) then     
+                call bisectv6bflex(ileftbisect,mmaxnow2)
+                call bisectv6rbflex(mmaxnow2)  
+                call bisectv6lbflex(mmaxnow2)    
+            else
+                call bisectv6rbflex(mmaxnow2)  
+                call bisectv6lbflex(mmaxnow2)  
+                call bisectv6bflex(  nbisect-(nchorizo-ileftbisect)-2**(mmax-1),mmaxnow2)
+            endif
+            
+  
           
-    !!! reptation        
-    !    if (nrepmax == 1) then
-    !     !call reptation1 
-    !        call reptation
-    !    else 
-    !        if (nrepmax /= 0) then
-    !            call reptation  
-    !        endif
-    !    endif
-    !!! reptation, consider a bisection-ike reptation.
+        !!! reptation        
+        !    if (nrepmax == 1) then
+        !     !call reptation1 
+        !        call reptation
+        !    else 
+        !        if (nrepmax /= 0) then
+        !            call reptation  
+        !        endif
+        !    endif
+        !!! reptation, consider a bisection-ike reptation maybe.
    
 
-    ! below are mixed move, turn off now.  
-    !----------------------------------------------      
-        !rn=randn(1)
-        !if (rn(1)<=0.99999) then  
+        ! below are mixed move, turn off now.  
+        !----------------------------------------------      
+            !rn=randn(1)
+            !if (rn(1)<=0.99999) then  
         
-    ! new improved  before 2019-4-7        
-        !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
-        ! !write(6,*) 'ileftbisect -', ileftbisect    
-        ! !call bisectv6improve(nchorizo-nbisect)
-        ! call bisectv6a(nchorizo-nbisect)
-        ! !write(6,*) 'bisectv6r called =', ileftbisect
-        ! call bisectv6ra
-        ! !write(6,*) 'bisectv6l called =', ileftbisect 
-        ! call bisectv6la      
-        !else
-        ! !write(6,*) 'ileftbisect +', ileftbisect
-        ! !write(6,*) 'bisectv6r called =', ileftbisect   
-        ! call bisectv6ra
-        ! !write(6,*) 'bisectv6l called =', ileftbisect 
-        ! call bisectv6la 
-        ! !call bisectv6improve(0) 
-        ! call bisectv6a(0)
-        !endif           
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!         
+        ! new improved  before 2019-4-7        
+            !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
+            ! !write(6,*) 'ileftbisect -', ileftbisect    
+            ! !call bisectv6improve(nchorizo-nbisect)
+            ! call bisectv6a(nchorizo-nbisect)
+            ! !write(6,*) 'bisectv6r called =', ileftbisect
+            ! call bisectv6ra
+            ! !write(6,*) 'bisectv6l called =', ileftbisect 
+            ! call bisectv6la      
+            !else
+            ! !write(6,*) 'ileftbisect +', ileftbisect
+            ! !write(6,*) 'bisectv6r called =', ileftbisect   
+            ! call bisectv6ra
+            ! !write(6,*) 'bisectv6l called =', ileftbisect 
+            ! call bisectv6la 
+            ! !call bisectv6improve(0) 
+            ! call bisectv6a(0)
+            !endif           
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!         
          
-    ! half lr bisection        
-        !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
-        ! !write(6,*) 'ileftbisect -', ileftbisect    
-        ! call bisectv6improve(nchorizo-nbisect)
-        ! !write(6,*) 'bisectv6r called =', ileftbisect
-        ! call bisectv6rhalf(nchorizo)
-        ! call bisectv6lhalf(0)      
-        !else
-        ! !write(6,*) 'ileftbisect +', ileftbisect 
-        ! call bisectv6rhalf(nchorizo)
-        !! write(6,*) 'bisectv6l called =', ileftbisect 
-        ! call bisectv6lhalf(0) 
-        ! call bisectv6improve(0) 
-        !endif  
-    !     
+        ! half lr bisection        
+            !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
+            ! !write(6,*) 'ileftbisect -', ileftbisect    
+            ! call bisectv6improve(nchorizo-nbisect)
+            ! !write(6,*) 'bisectv6r called =', ileftbisect
+            ! call bisectv6rhalf(nchorizo)
+            ! call bisectv6lhalf(0)      
+            !else
+            ! !write(6,*) 'ileftbisect +', ileftbisect 
+            ! call bisectv6rhalf(nchorizo)
+            !! write(6,*) 'bisectv6l called =', ileftbisect 
+            ! call bisectv6lhalf(0) 
+            ! call bisectv6improve(0) 
+            !endif  
+        !     
 
-    ! old lr bisection        
-        !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
-        ! !write(6,*) 'ileftbisect -', ileftbisect    
-        ! call stdmove1rangefastv6(nchorizo,nchorizo)  
-        ! !write(6,*) 'bisectv6r called =', ileftbisect
-        ! call bisectv6r
-        ! call bisectv6l      
-        !else
-        ! !write(6,*) 'ileftbisect +', ileftbisect
-        ! call stdmove1rangefastv6(0,0)
-        ! call bisectv6r
-        ! !write(6,*) 'bisectv6l called =', ileftbisect 
-        ! call bisectv6l 
-        !endif  
-    !        
+        ! old lr bisection        
+            !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
+            ! !write(6,*) 'ileftbisect -', ileftbisect    
+            ! call stdmove1rangefastv6(nchorizo,nchorizo)  
+            ! !write(6,*) 'bisectv6r called =', ileftbisect
+            ! call bisectv6r
+            ! call bisectv6l      
+            !else
+            ! !write(6,*) 'ileftbisect +', ileftbisect
+            ! call stdmove1rangefastv6(0,0)
+            ! call bisectv6r
+            ! !write(6,*) 'bisectv6l called =', ileftbisect 
+            ! call bisectv6l 
+            !endif  
+        !        
       
       
-        !else   
+            !else   
 
-    ! move 1 by 1   
-	    ! if (ileftbisect.lt.nchorizo) then ! nbisect should be >= 2.
-	    !n1=nchorizo-ileftbisect
-	    !n2=nbisect-1-n1 
-    !      !write (12,*) 'n1, n2=', n1,n2
-    !      !write (6,*) 'n1, n2=', n1,n2
-    !      !call stdmove1rangefastv6(ileftbisect+1,nchorizo)	
-    !      call stdmove1fastv6(ileftbisect+1,nchorizo)     
-	    !if (n2.gt.0) then    
-	    !!call stdmove1rangefastv6(0,n2-1)
-    !      call stdmove1fastv6(0,n2-1)
-    !      endif
-    !    else ! ileftbisect.eq.nchorizo	 
-    !      !call stdmove1rangefastv6(0,nbisect-2)	
-    !      call stdmove1fastv6(0,nbisect-2)
-    !    endif	         
-    !     
-        !endif 
-    !------------------------------------------------   
-    endif
+        ! move 1 by 1   
+	        ! if (ileftbisect.lt.nchorizo) then ! nbisect should be >= 2.
+	        !n1=nchorizo-ileftbisect
+	        !n2=nbisect-1-n1 
+        !      !write (12,*) 'n1, n2=', n1,n2
+        !      !write (6,*) 'n1, n2=', n1,n2
+        !      !call stdmove1rangefastv6(ileftbisect+1,nchorizo)	
+        !      call stdmove1fastv6(ileftbisect+1,nchorizo)     
+	        !if (n2.gt.0) then    
+	        !!call stdmove1rangefastv6(0,n2-1)
+        !      call stdmove1fastv6(0,n2-1)
+        !      endif
+        !    else ! ileftbisect.eq.nchorizo	 
+        !      !call stdmove1rangefastv6(0,nbisect-2)	
+        !      call stdmove1fastv6(0,nbisect-2)
+        !    endif	         
+        !     
+            !endif 
+        !------------------------------------------------   
+        endif
     
     else
 	    stop 'nbisect >= nchorizo, stop!'
@@ -1222,7 +1273,7 @@ contains
         
     do bilvl=1,mmax  ! besection.  level 1 to N. mmax = the total level N.	 
         ! move the current level   
-        sigmamid=sqrt(hbar*tau*2.0_r8**(-bilvl))  
+        sigmamid=sqrt(hbar*tau/2**bilvl)  
 	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
 	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
 		    imid=2**(mmax-bilvl)+i*2**(mmax-bilvl+1)
@@ -1310,7 +1361,145 @@ contains
     
     return  
     end subroutine bisectv6b            
+  
+    subroutine bisectv6bflex(ileftbisect,mmaxnow) 
+    ! based on v6a version. move beads first, then do an overall judge.
+    use wavefunction
+    use estimator
+    use random
+    use v6stepcalc
+    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
+					    ,k,bilvl &
+	                    ,dtexpt,mmaxnow,nbisectnow
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart)
+    real(kind=r8) :: tmp 
+    complex(kind=r8) :: oldlv(0:mmaxnow),newlv(0:mmaxnow)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:2**mmaxnow),cwtr2ltmp1(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:2**mmaxnow),cwtr2ltmp2(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
+    logical :: reject	
+ 
+    ibisecttot=ibisecttot+1  
    
+    nbisectnow=2**mmaxnow
+    oldristra(0:nbisectnow)=ristra(ileftbisect:ileftbisect+nbisectnow)
+   
+    newristra(0)=oldristra(0)
+    newristra(nbisectnow)=oldristra(nbisectnow)
+
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisectnow)  
+   
+    ! tmp1 deal with oldlv
+    cwtl2rtmp1(:,:,0:nbisectnow)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow)
+    cwtr2ltmp1(:,:,0:nbisectnow)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisectnow)
+    ! tmp2 deal with newlv   
+    cwtl2rtmp2(:,:,0:nbisectnow)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow)
+    cwtr2ltmp2(:,:,0:nbisectnow)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisectnow)
+   
+    oldlv=1.
+    newlv=1.   
+    
+    tau=dt*nbisectnow ! total time for the bisection slice.
+
+    ! up to here, newristra has been loaded.
+   
+    ! judge if we accept the newristra or not.
+    ! in this v6 case, v is not justpotential v, it should be the value of < ... >. lv.
+        
+    do bilvl=1,mmaxnow  ! besection.  level 1 to N. mmaxnow = the total level N.	 
+        ! move the current level   
+        sigmamid=sqrt(hbar*tau/2**bilvl)  
+	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
+	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
+		    imid=2**(mmaxnow-bilvl)+i*2**(mmaxnow-bilvl+1)
+		    il=imid-2**(mmaxnow-bilvl)
+		    ir=imid+2**(mmaxnow-bilvl)
+		    gauss=sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+		    xmid=(newristra(il)%x+newristra(ir)%x)/2
+		    newristra(imid)%x=xmid+gauss  
+            !write(12,*) 'bilvl il ir imid sigmamid =',bilvl, il,ir,imid,sigmamid
+            !write(12,*) 'gauss =', gauss
+        enddo         
+    enddo
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!    
+    ! then judge the last level
+	    bisecttot(mmaxnow)=bisecttot(mmaxnow)+1	   
+	    lmax=2**mmaxnow-1 
+	    jd=1 ! interval
+	    dtexpt=-1 ! for the R L part, that's why the extra -1. dt=2**dtexp
+	    do l=1,lmax
+		    j=l*jd
+		    jp=(l-1)*jd
+		    !xold=oldristra(j)%x
+            xnew=newristra(j)%x
+		    ! call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
+        enddo
+	    jmax=lmax*jd
+	    newlv(mmaxnow)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 	
+	    oldlv(mmaxnow)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	   
+	    tmp=log(newlv(mmaxnow))-log(oldlv(mmaxnow)) 
+  	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
+	    rn=randn(1)	   
+    ! can check if l2r and r2l give	the same lv.		    
+            !write(12,*) 'tmp ln rn=',tmp,log(rn(1))
+	    if (log(rn(1)).lt.tmp) then
+	        reject=.false. 
+	        bisectcount(mmaxnow)=bisectcount(mmaxnow)+1	 
+	    else
+	        reject=.true. 
+            !write(6,*) 'rn=',rn(1),log(rn(1))
+            !write(6,*) 'tmp=',tmp,newlv(mmaxnow),oldlv(mmaxnow),log(newlv(mmaxnow)),log(oldlv(mmaxnow)) 	
+            
+        endif 
+		    !write(6,*) 'imid=',imid	
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!        
+        
+    if (reject) then
+	    call addval(2,0.0_r8,1.0_r8)
+    else
+	    ibisect=ibisect+1 
+	    call addval(2,1.0_r8,1.0_r8)  
+ 
+	    !do i=0,nbisectnow
+    !       ristra(ileftbisect+i)=newristra(i)
+    !   enddo	 
+        ristra(ileftbisect:ileftbisect+nbisectnow)=newristra(0:nbisectnow) ! this look like a bad way (pointer issue I think), do loop is good. 04/10/2019£¬ remove pointer, problem fixed I tihnk.	 
+
+        xl=ristra(0)%x     
+	    xr=ristra(nchorizo)%x     
+    ! update cwtl2r, cwtr2l.	 
+    ! update cwtl2r for all beads. this can be optimized in the future.
+     
+	    cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmaxnow-1 
+	    if ((ileftbisect+nbisectnow).le.nchorizo-1) then
+        do k=ileftbisect+nbisectnow,nchorizo-1
+	    x=ristra(k)%x
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
+        enddo
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
+        else
+        !ileftbisect+nbisectnow=nchorizo  
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
+        endif
+   
+    ! update cwtr2l for all the beads
+	    do k=ileftbisect+nbisectnow-1,1,-1
+	    x=ristra(k)%x
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
+	    enddo
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
+
+    endif  
+
+    rejectbisectv6improve=reject
+    
+    return  
+    end subroutine bisectv6bflex           
+    
     subroutine bisectv6lb 
     ! b version, move the whole nbiect beads instead of bisecthalf.
     ! should be better than bisectv6l,rhalf     
@@ -1454,7 +1643,138 @@ contains
     return  
     end subroutine bisectv6lb  
    
+    subroutine bisectv6lbflex(mmaxnow)
+    ! b version, move the whole nbiect beads instead of bisecthalf.
+    ! should be better than bisectv6l,rhalf     
+    ! move the left end, 0th bead,ileftbiect=0; if ileftbisect /= 0 then the small modification on 0th level is needed.
+    use wavefunction
+    use estimator
+    use random
+    use v6stepcalc
+    use brut
+    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
+					    ,irightbisect,k,bilvl &
+	                    ,dtexpt &
+                        ,nbisectnow,mmaxnow
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),x0new(3,npart)
+    real(kind=r8) :: tmp 
+    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtendtmp(0:nspin-1,nisospin) &
+                        ,cwtbegintmp2(0:nspin-1,nisospin)        
+    logical :: reject	
+
+    ibisecttotl=ibisecttotl+1  
+    
+    nbisectnow=2**mmaxnow
+    ileftbisect=0
+    irightbisect=ileftbisect+nbisectnow
+
+    tau=dt*nbisectnow ! total time for the bisection slice. nisectnow is usually nbisecthalf
+    sigmamid=sqrt(2*hbar*tau)  
+
+    oldristra(0:nbisectnow)=ristra(ileftbisect:ileftbisect+nbisectnow)
+ 
+    ! deal with the two ends first, then do the classic bisection.   
    
+    newristra(nbisectnow)=oldristra(nbisectnow)   
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisectnow)
+ 
+    newristra(0)%x=oldristra(nbisectnow)%x+sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+   
+    x0new=newristra(0)%x
+   
+    ! i,jpro,i,jplo, the o means old are actually the current order.
+   
+    call corop(x0new,iplo,jplo,cwtbegintmp2)     
+   
+    oldlv(0)=1.
+    newlv(0)=1. ! dummy
+
+    cwtl2rtmp1(:,:,0:nbisectnow)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow)
+    call v6propr(x0new,-1,cwtbegintmp2,cwtl2rtmp2(:,:,0)) 
+   
+    ! prepare the further new bisection positions
+    do bilvl=1,mmaxnow   ! level 1 to N. mmax = the total level N.
+	    sigmamid=sqrt(hbar*tau/2**bilvl)  
+	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
+	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
+		    imid=2**(mmaxnow-bilvl)+i*2**(mmaxnow-bilvl+1)
+		    il=imid-2**(mmaxnow-bilvl)
+		    ir=imid+2**(mmaxnow-bilvl)
+		    !write(6,*) 'bilvl il ir imid sigmamid=',bilvl, il,ir,imid,sigmamid
+		    gauss=sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+		    xmid=(newristra(il)%x+newristra(ir)%x)/2.
+		    newristra(imid)%x=xmid+gauss
+	    enddo 
+    enddo 
+
+    bilvl=mmaxnow  ! besection.  level 1 to N. mmax = the total level N.	   
+	bisecttotl(bilvl)=bisecttotl(bilvl)+1.	   
+	lmax=2**bilvl-1 
+	jd=2**(mmaxnow-bilvl) ! interval
+	dtexpt=mmaxnow-bilvl-1 ! for the R L part, that's why the extra -1. dt=2**dtexp 
+	do l=1,lmax
+		j=l*jd
+		jp=(l-1)*jd
+		!xold=oldristra(j)%x
+        xnew=newristra(j)%x
+		!call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
+		!if ( sum((xnew-xold)**2).eq.0) then
+			!write(6,*) 'bilvl=',bilvl	
+			!write(6,*) 'l=',l,j,jp
+			!write(6,*) 'sigmamid=',sigmamid
+		!   write(6,*) 'xnew-xold=',xnew-xold
+		!endif   
+	enddo
+	jmax=lmax*jd  
+	oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	
+	newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 
+	tmp=log(newlv(bilvl))-log(oldlv(bilvl))
+  	!tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
+	rn=randn(1)	   
+! can check if l2r and r2l give	the same lv.		    
+	    !write(6,*) 'tmp ln rn=',tmp,log(rn(1))
+	if (log(rn(1)).lt.tmp) then
+	    reject=.false. 
+        bisectcountl(bilvl)=bisectcountl(bilvl)
+        call addval(10,1.0_r8,1.0_r8)  
+	    ibisectl=ibisectl+1 
+        ristra(ileftbisect:ileftbisect+nbisectnow)=newristra(0:nbisectnow)
+    !ristra(ileftbisect:ileftbisect+nbisect)=newristra(0:nbisect) ! this look like a bad way (pointer issue I think), do loop is good.	 
+        xl=ristra(0)%x     
+	    xr=ristra(nchorizo)%x 
+    ! update cwtl2r, cwtr2l.	 
+        cwtbegin=cwtbegintmp2
+	    cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,0:jmax) ! here jmax should already be 2**mmax-1    
+	    if ((ileftbisect+nbisectnow).le.nchorizo-1) then
+        do k=ileftbisect+nbisectnow,nchorizo-1
+	    x=ristra(k)%x
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
+        enddo
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
+        else
+        !ileftbisect+nbisect=nchorizo  
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
+        endif       
+    ! update cwtr2l for all the beads
+	    do k=ileftbisect+nbisectnow-1,1,-1
+	    x=ristra(k)%x
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
+	    enddo
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  
+	else
+	    reject=.true.  
+        call addval(10,0.0_r8,1.0_r8)   
+	endif   
+
+    return  
+    end subroutine bisectv6lbflex  
+    
     subroutine bisectv6rb ! move the right end. irightbisect=nchorizo
     ! move beads, then do an overall judge.
     use wavefunction
@@ -1473,8 +1793,7 @@ contains
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
     complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisect),cwtl2rtmp2(0:nspin-1,nisospin,0:nbisect) &
 	                    ,cwtbegintmp(0:nspin-1,nisospin) &
-                        ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	              
-                      
+                        ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	                               
     logical :: reject	
    
     ibisecttotr=ibisecttotr+1    
@@ -1489,7 +1808,7 @@ contains
     mmaxnow=mmax  
   
     tau=dt*nbisectnow ! total time for the bisection slice.
-    sigmamid=sqrt(2.*hbar*tau)  
+    sigmamid=sqrt(2*hbar*tau)  
    
     oldristra(0:nbisectnow)=ristra(ileftbisect:ileftbisect+nbisectnow)
  
@@ -1504,16 +1823,17 @@ contains
    
     call corop(xnew,ipro,jpro,cwtendnew)     
 
-    oldlv(0)=1.
-    newlv(0)=1. ! why 1. check again.
+    oldlv(0)=1
+    newlv(0)=1 ! dummy, no use.
    
     cwtl2rtmp1(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
     cwtl2rtmp2(:,:,0)=cwtl2rtmp1(:,:,0)
-    call v6propr(oldristra(nbisectnow)%x,-1,cwtend,cwtendtmp1now)  
+    cwtendtmp1now=cwtr2l(:,:,nchorizo)
+    !call v6propr(oldristra(nbisectnow)%x,-1,cwtend,cwtendtmp1now)  
     call v6propr(newristra(nbisectnow)%x,-1,cwtendnew,cwtendtmp2now)    
      
     do bilvl=1,mmaxnow   ! level 1 to N. mmax = the total level N.
-	    sigmamid=sqrt(hbar*tau*2.0_r8**(-bilvl))  
+	    sigmamid=sqrt(hbar*tau/2**bilvl)  
 	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
 	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
 		    imid=2**(mmaxnow-bilvl)+i*2**(mmaxnow-bilvl+1)
@@ -1521,53 +1841,52 @@ contains
 		    ir=imid+2**(mmaxnow-bilvl)
 		    !write(6,*) 'bilvl il ir imid sigmamid=',bilvl, il,ir,imid,sigmamid
 		    gauss=sigmamid*reshape(gaussian(3*npart),(/3,npart/))
-		    xmid=(newristra(il)%x+newristra(ir)%x)/2.
+		    xmid=(newristra(il)%x+newristra(ir)%x)/2
 		    newristra(imid)%x=xmid+gauss
 	    enddo 
     enddo     
     ! judge
-        bilvl=mmaxnow  ! besection.  level 1 to N. mmax = the total level N.	   
-	    bisecttotr(bilvl)=bisecttotr(bilvl)+1.	   
-	    lmax=2**bilvl-1 
-	    jd=2**(mmaxnow-bilvl) ! interval
-	    dtexpt=mmaxnow-bilvl-1 ! for the R L part, that's why the extra -1. dt=2**dtexp         
-	    do l=1,lmax
-		    j=l*jd
-		    jp=(l-1)*jd
-		    !xold=oldristra(j)%x
-            xnew=newristra(j)%x
-		    !call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
-		    !if ( sum((xnew-xold)**2).eq.0) then
-			    !write(6,*) 'bilvl=',bilvl	
-			    !write(6,*) 'l=',l,j,jp
-			    !write(6,*) 'sigmamid=',sigmamid
-		    !   write(6,*) 'xnew-xold=',xnew-xold
-		    !endif   
-	    enddo
-	    jmax=lmax*jd  
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp1now(:,:)) ))	
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp2now(:,:)) )) 
-	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))
-  	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
-	    rn=randn(1)	   
-    ! can check if l2r and r2l give	the same lv.		    
-	        !write(6,*) 'tmp ln rn=',tmp,log(rn(1))
-	    if (log(rn(1)).lt.tmp) then
-	        reject=.false. 
-            bisectcountr(bilvl)=bisectcountr(bilvl)+1.
-	    else
-	        reject=.true.  
-	    endif 
+    bilvl=mmaxnow  ! besection.  level 1 to N. mmax = the total level N.	   
+	bisecttotr(bilvl)=bisecttotr(bilvl)+1   
+	lmax=2**bilvl-1 
+	jd=2**(mmaxnow-bilvl) ! interval
+	dtexpt=mmaxnow-bilvl-1 ! for the R L part, that's why the extra -1. dt=2**dtexp         
+	do l=1,lmax
+		j=l*jd
+		jp=(l-1)*jd
+		!xold=oldristra(j)%x
+        xnew=newristra(j)%x
+		!call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
+		!if ( sum((xnew-xold)**2).eq.0) then
+			!write(6,*) 'bilvl=',bilvl	
+			!write(6,*) 'l=',l,j,jp
+			!write(6,*) 'sigmamid=',sigmamid
+		!   write(6,*) 'xnew-xold=',xnew-xold
+		!endif   
+	enddo
+	jmax=lmax*jd  
+    write(6,*) 'jmax=',jmax
+	oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp1now(:,:)) ))	
+	newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp2now(:,:)) )) 
+	tmp=log(newlv(bilvl))-log(oldlv(bilvl))
+  	!tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
+	rn=randn(1)	   
+! can check if l2r and r2l give	the same lv.		    
+	    !write(6,*) 'tmp ln rn=',tmp,log(rn(1))
+	if (log(rn(1)).lt.tmp) then
+	    reject=.false. 
+        bisectcountr(bilvl)=bisectcountr(bilvl)+1.
+	else
+	    reject=.true.  
+	endif 
    
     if (reject) then
         call addval(11,0.0_r8,1.0_r8)  
     else
         call addval(11,1.0_r8,1.0_r8)  
 	    ibisectr=ibisectr+1 
- 
         ristra(ileftbisect:ileftbisect+nbisectnow)=newristra(0:nbisectnow)     
-    !ristra(ileftbisect:ileftbisect+nbisect)=newristra(0:nbisect) ! this look like a bad way (pointer issue I think), do loop is good.	 
 	 	 
     ! update cwtl2r, cwtr2l.	 
     ! update cwtl2r for all beads. this can be optimized in the future.
@@ -1575,13 +1894,12 @@ contains
   
         call v6propl(ristra(nchorizo)%x,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo)) ! ileftbisect+nbisectnow=nchorizo  
 
-     
         ! update cwtr2l for all the beads
         cwtend=cwtendnew         
         cwtr2l(:,:,nchorizo)=cwtendtmp2now
 	    do k=nchorizo-1,1,-1
-        x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
+            x=ristra(k)%x
+	        call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
         xl=ristra(0)%x
         call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
@@ -1591,7 +1909,130 @@ contains
     return  
     end subroutine bisectv6rb      
    
+    subroutine bisectv6rbflex(mmaxnow) ! mmaxnow <= mmax
+    use wavefunction
+    use estimator
+    use random
+    use v6stepcalc
+    use brut
+    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
+					    ,irightbisect,k,bilvl &
+	                    ,dtexpt &
+                        ,nbisectnow,mmaxnow
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart) 
+    real(kind=r8) :: tmp 
+    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:2**mmaxnow),cwtl2rtmp2(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin) &
+                        ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	                               
+    logical :: reject	
    
+    ibisecttotr=ibisecttotr+1    
+   
+    nbisectnow=2**mmaxnow
+    ileftbisect=nchorizo-nbisectnow
+    irightbisect=nchorizo
+  
+  
+    tau=dt*nbisectnow ! total time for the bisection slice.
+    sigmamid=sqrt(2*hbar*tau)  
+   
+    oldristra(0:nbisectnow)=ristra(ileftbisect:ileftbisect+nbisectnow)
+ 
+    ! deal with the two ends first, then do the classic bisection.   
+    newristra(0)=oldristra(0) 
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+   
+    newristra(nbisectnow)%x=oldristra(0)%x+sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+   
+    xold=oldristra(nbisectnow)%x
+    xnew=newristra(nbisectnow)%x   
+   
+    call corop(xnew,ipro,jpro,cwtendnew)     
+
+    oldlv(0)=1
+    newlv(0)=1 ! dummy, no use.
+   
+    cwtl2rtmp1(:,:,0:nbisectnow)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow)
+    cwtl2rtmp2(:,:,0)=cwtl2rtmp1(:,:,0)
+    cwtendtmp1now=cwtr2l(:,:,nchorizo)
+    !call v6propr(oldristra(nbisectnow)%x,-1,cwtend,cwtendtmp1now)  
+    call v6propr(newristra(nbisectnow)%x,-1,cwtendnew,cwtendtmp2now)    
+     
+    do bilvl=1,mmaxnow   ! level 1 to N. mmax = the total level N.
+	    sigmamid=sqrt(hbar*tau/2**bilvl)  
+	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
+	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
+		    imid=2**(mmaxnow-bilvl)+i*2**(mmaxnow-bilvl+1)
+		    il=imid-2**(mmaxnow-bilvl)
+		    ir=imid+2**(mmaxnow-bilvl)
+		    !write(6,*) 'bilvl il ir imid sigmamid=',bilvl, il,ir,imid,sigmamid
+		    gauss=sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+		    xmid=(newristra(il)%x+newristra(ir)%x)/2
+		    newristra(imid)%x=xmid+gauss
+	    enddo 
+    enddo     
+    ! judge
+    bilvl=mmaxnow  ! besection.  level 1 to N. mmax = the total level N.	   
+	bisecttotr(bilvl)=bisecttotr(bilvl)+1   
+	lmax=2**bilvl-1 
+	jd=2**(mmaxnow-bilvl) ! interval
+	dtexpt=mmaxnow-bilvl-1 ! for the R L part, that's why the extra -1. dt=2**dtexp         
+	do l=1,lmax
+		j=l*jd
+		jp=(l-1)*jd
+		!xold=oldristra(j)%x
+        xnew=newristra(j)%x
+		!call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
+		!if ( sum((xnew-xold)**2).eq.0) then
+			!write(6,*) 'bilvl=',bilvl	
+			!write(6,*) 'l=',l,j,jp
+			!write(6,*) 'sigmamid=',sigmamid
+		!   write(6,*) 'xnew-xold=',xnew-xold
+		!endif   
+	enddo
+	jmax=lmax*jd    
+	oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp1now(:,:)) ))	
+	newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp2now(:,:)) )) 
+	tmp=log(newlv(bilvl))-log(oldlv(bilvl))
+  	!tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
+	rn=randn(1)	   
+! can check if l2r and r2l give	the same lv.		    
+	    !write(6,*) 'tmp ln rn=',tmp,log(rn(1))
+	if (log(rn(1)).lt.tmp) then
+	    reject=.false. 
+        bisectcountr(bilvl)=bisectcountr(bilvl)+1
+        call addval(11,1.0_r8,1.0_r8)  
+	    ibisectr=ibisectr+1 
+        ristra(ileftbisect:ileftbisect+nbisectnow)=newristra(0:nbisectnow)      	 
+    ! update cwtl2r, cwtr2l.	 
+    ! update cwtl2r for all beads. this can be optimized in the future.
+        cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1  
+        call v6propl(ristra(nchorizo)%x,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo)) ! ileftbisect+nbisectnow=nchorizo  
+        ! update cwtr2l for all the beads
+        cwtend=cwtendnew         
+        cwtr2l(:,:,nchorizo)=cwtendtmp2now
+	    do k=nchorizo-1,1,-1
+            x=ristra(k)%x
+	        call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
+	    enddo
+        xl=ristra(0)%x
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	                
+	else
+	    reject=.true.  
+        call addval(11,0.0_r8,1.0_r8)      
+	endif    
+    return  
+    end subroutine bisectv6rbflex     
+   
+    
+    
+    
+    
+    
     subroutine bisectv6a(ileftbisect) 
     ! slighly faster than the bisectv6improve verison. only move the beads at the currently level then judge.
     use wavefunction
@@ -4296,11 +4737,13 @@ contains
     
     subroutine checkblkstat ! the check stuck config clock.
     use mympi
-    integer(kind=i4) :: myunit
+    use random
+    integer(kind=i4) :: myunit,k
     real(kind=r8) :: r(10)
     character(len=30) :: filename    
     real(kind=r8) :: xtot(3,npart,0:nchorizo)
     integer(kind=i4) :: ipl(6),jpl(6),ipr(6),jpr(6)
+    integer(kind=i8) :: irnout
       
     r(1)=dble(icmov1)/icmov1tot
     r(2)=dble(icstdmove2)/icstdmove2tot
@@ -4319,17 +4762,41 @@ contains
         if ( nblockstuck >= 5 ) then 
             if (sum(ibisectstuck(nblockstuck-4:nblockstuck)).eq.5) then
                 call chorizoallout(xtot,ipl,jpl,ipr,jpr) 
+                call showirn(irnout)
                 write(filename,'("myrank",i10,".stuck")') myrank()
                 open(newunit=myunit,form='formatted',file=trim(filename),position='rewind')  
-                    write (myunit,*) 'nsteps really stuck are ',nblockstuck            
-                    write (myunit,'(6i10)') ibisect,ibisecttot,ibisectl,ibisecttotl,ibisectr,ibisecttotr
-                    write (myunit,'(6i10)') ipl
-                    write (myunit,'(6i10)') jpl
-                    write (myunit,'(6i10)') ipr
-                    write (myunit,'(6i10)') jpr
-                    write (myunit,'(3e15.7)') reshape(xtot,(/3*npart*(nchorizo+1)/))      
+                write (myunit,*) 'nsteps really stuck are ',nblockstuck            
+                write (myunit,'(6i10)') ibisect,ibisecttot,ibisectl,ibisecttotl,ibisectr,ibisecttotr
+                write (myunit,*) 'irn seed is ',irnout 
+                
+                bisectrate(:)=bisectcount(:)/bisecttot(:)
+                write (myunit,*)  
+                write (myunit,'(''dt ='',t40,f10.5)') dt
+                write (myunit,'(''nchorizo ='',t40,i10)') nchorizo   
+                write (myunit,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') r(1),icmov1,icmov1tot,icstdmove1tot
+                write (myunit,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') r(2),icstdmove2,icstdmove2tot
+                write (myunit,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') r(3),icshft,icshfttot
+                write (myunit,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') r(4),ic23,ic23tot
+                write (myunit,'(''icn ratio ='',t40,f10.5,2(i10))') r(5),icn,icntot
+                write (myunit,'(''lr ratio ='',t40,f10.5,2(i10))') r(myunit),iclr,iclrtot
+                write (myunit,'(''reptation ratio ='',t40,f10.5,3(i10))') r(7),icrep,icreptot
+                write (myunit,'(''ibisect ratio ='',t40,f10.5,3(i10))') r(8),ibisect,ibisecttot,icbisecttot
+                write (myunit,'(''bisection level 1 to mmax ratio ='',t40,f10.5)') (bisectrate(k),k=1,mmax)
+                write (myunit,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') r(9),ibisectl,ibisecttotl
+                !write (myunit,'(''bisection lend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountl(k)/bisecttotl(k),k=0,mmax-1)
+                write (myunit,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') r(10),ibisectr,ibisecttotr
+                !write (myunit,'(''bisection rend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountr(k)/bisecttotr(k),k=0,mmax-1)
+                write (myunit,'(''# of energy samples ='',t40,i10)') ice
+                write (myunit,*)   
+                
+                write (myunit,'(6i10)') ipl
+                write (myunit,'(6i10)') jpl
+                write (myunit,'(6i10)') ipr
+                write (myunit,'(6i10)') jpr
+                write (myunit,'(3e15.7)') reshape(xtot,(/3*npart*(nchorizo+1)/))      
                 close(myunit)
                 write(6,*) 'stuck configuration, abort! myrank= ', myrank()
+                write(myunit,*) 'stuck configuration, abort! myrank= ', myrank()
                 call abort                         
             endif       
         endif
@@ -4732,8 +5199,8 @@ contains
     !rgr=en
     !rg=(rgl+rgr)/2.
     !
-    f=cmplx(psi) ! neglect the imaginary part actually.
-    rf=real(f)
+    f=cmplx(psi) ! neglect the imaginary part actually. 
+    rf=real(f) ! f is the stuff without gaussian part bc gaussians are cancelled ususaly.
     absrf=abs(real(f))
   
     !write(6,*) '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'  

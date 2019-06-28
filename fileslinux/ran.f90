@@ -55,7 +55,7 @@ module random
    integer, private, parameter :: i8=selected_int_kind(15)
    integer, private, parameter :: r8=selected_real_kind(15,9)
    integer(kind=i8), private, parameter :: mask48 = ishft(1_8,48)-1
-   integer(kind=i8), private, save :: irn = 1_8
+   integer(kind=i8), private, save :: irn = 1_8,irnsave
 
 contains   
    function randn(n)
@@ -105,25 +105,29 @@ contains
    end function gaussian
 
    subroutine setrn(irnin)
-!
 ! set the seed
-!
    integer(kind=i8) :: irnin
-   integer(kind=i8), dimension(1) :: iseed
+   !integer(kind=i8), dimension(1) :: iseed
    irn=iand(irnin,mask48)
+   call savern(irn)
    !iseed=irnin
    !call RANDOM_SEED(PUT=iseed) ! set the internal ran function's seed.
    return
    end subroutine setrn
 
-   subroutine savern(irnout)
-!
+   subroutine savern(irnin)
 ! save the seed
-!
-   integer(kind=i8) :: irnout
-   irnout=irn
+   integer(kind=i8) :: irnin
+   irnsave=irnin
    return
    end subroutine savern
+   
+   subroutine showirn(irnout)
+! show the seed
+   integer(kind=i8) :: irnout
+   irnout=irnsave
+   return
+   end subroutine showirn   
    
 !   function randomn(n) ! the default ramdom_number subroutine.
 !! return an array of random variates (0,1)

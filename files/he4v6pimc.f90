@@ -18,6 +18,7 @@
    integer, parameter :: i8=selected_int_kind(15)
    integer, parameter :: r8=selected_real_kind(15,9)
    integer(kind=i8) :: irn,irnsave
+   integer(kind=i8), allocatable :: irnall(:)
    real(kind=r8) :: dummy   
    integer(kind=i4) :: npart,nprot
    integer(kind=i4) :: i,it,j,k,l &
@@ -257,23 +258,23 @@
     endif
     
     do i=0,nproc()-1
-        call ran2(dummy,irn)
+        if (myrank() /= 0) call ran2(dummy,irn)
         if (myrank().eq.i) then
             irnsave=irn
             call setrn(irn)    ! different cores have different seed. 
             exit       
         endif 
     enddo
-
-    !allocate(irnall(0:nproc()-1))
-    !call gather(irnsave,irnall)
-    !if (myrank().eq.0) then
-    !    open(unit=9,form='formatted',file='irnallcheck.txt')
-    !    do i=0,nproc()-1
-    !       write(9,*) i,irnall(i)
-    !    enddo
-    !    close(9)
-    !endif
+    allocate(irnall(0:nproc()-1))
+    call gather(irnsave,irnall)
+    if (myrank().eq.0) then
+        open(unit=9,form='formatted',file='irnlist.txt')
+        do i=0,nproc()-1
+           write(9,*) i,irnall(i)
+        enddo
+        close(9)
+    endif
+    deallocate(irnall)
    
    
     call v6stepcalcinit(npart,nprot,dt,hbar,ntab,rangev,mmax,nrepmax,iem,irep) 
@@ -330,9 +331,9 @@
             endif    
         enddo
         if (myrank().eq.0) then
-        write (6,'(/,''iteration ='',t30,i14)') it
-        write (12,'(/,''iteration ='',t30,i14)') it
-        call showstat 
+            write (6,'(/,''iteration ='',t30,i14)') it
+            write (12,'(/,''iteration ='',t30,i14)') it
+            call showstat 
         endif
         call checkblkstat
         call update   !collect block averages

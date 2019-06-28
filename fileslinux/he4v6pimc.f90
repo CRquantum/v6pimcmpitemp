@@ -20,27 +20,25 @@
    integer(kind=i8) :: irn,irnsave
    integer(kind=i8), allocatable :: irnall(:)
    real(kind=r8) :: dummy   
-   integer(kind=i4) :: npart,nprot,nneut,nspin,nisospin,nbasis,nstate,nstatenew,ispin,iispin
-   integer(kind=i4) :: i,imax,imaxval,it,j,k,l,m,n &
-	                  ,istep,nstep,neq,nav,nstepdecor,mmax,nbisect,ntab,nchorizo,irep,nrhobin &
+   integer(kind=i4) :: npart,nprot
+   integer(kind=i4) :: i,it,j,k,l &
+	                  ,nstep,neq,nav,nstepdecor,mmax,nbisect,ntab,nchorizo,irep,nrhobin &
 	                  ,nchorizomid,ixtemp,nrepmax &
                       ,day,hour,minute
-   real(kind=r8) :: rangev,rangerho,mov1step,x0step,mov2step,shftstep,rhobinsize,rangex
-   real(kind=r8) :: val1,val2,u1(6),u2(6),evdt1(6),evdt2(6),val3,u3(6),evdt3(6)
-   complex(kind=r8), allocatable :: cwtnew(:,:),cwtold(:,:),cwt1(:,:),cwt2(:,:),cwt1tmp(:,:),cwt2tmp(:,:)
-   real(kind=r8), allocatable :: x(:,:),xtot(:,:,:),xr(:,:),xl(:,:),rhodist(:),rhodisterr(:)
+   real(kind=r8) :: rangev,rangerho,mov1step,x0step,mov2step,shftstep,rhobinsize
+   real(kind=r8) :: val1,val2
+   real(kind=r8), allocatable :: xtot(:,:,:),rhodist(:),rhodisterr(:)
    real(kind=r8) :: hbar,dt
    real(kind=r8), allocatable :: valnow(:),valaverage(:),valerr(:)
-   real(kind=r8) :: valn,val,err,err1,err2,error
-   real(kind=r8) :: time0,time1,time2,time00,timeall,second! standard requires these to be real w/o kind
-   logical :: isite,icorrchk,iem,calcmode
+   real(kind=r8) :: err1,err2,error
+   real(kind=r8) :: time0,time1,time2,time3,time4,time00,timeall,second! standard requires these to be real w/o kind
+   logical :: isite,icorrchk,iem
    character(len=120), dimension(:), allocatable :: answer
-   character(len=70) :: infile,outfile,ooo
+   character(len=70) :: infile,outfile
    character(len=30) :: vpropchorizo
    integer(kind=i4) :: ipl(6),jpl(6),ipr(6),jpr(6)	
    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
-   real(kind=r8) :: randomtest(10)
 
     call init0 !mpi initialization must be done before reading    
     if (myrank().eq.0) then
@@ -260,23 +258,23 @@
     endif
     
     do i=0,nproc()-1
-        call ran2(dummy,irn)
+        if (myrank() /= 0) call ran2(dummy,irn)
         if (myrank().eq.i) then
             irnsave=irn
             call setrn(irn)    ! different cores have different seed. 
             exit       
         endif 
     enddo
-
-    !allocate(irnall(0:nproc()-1))
-    !call gather(irnsave,irnall)
-    !if (myrank().eq.0) then
-    !    open(unit=9,form='formatted',file='irnallcheck.txt')
-    !    do i=0,nproc()-1
-    !       write(9,*) i,irnall(i)
-    !    enddo
-    !    close(9)
-    !endif
+    allocate(irnall(0:nproc()-1))
+    call gather(irnsave,irnall)
+    if (myrank().eq.0) then
+        open(unit=9,form='formatted',file='irnlist.txt')
+        do i=0,nproc()-1
+           write(9,*) i,irnall(i)
+        enddo
+        close(9)
+    endif
+    deallocate(irnall)
    
    
     call v6stepcalcinit(npart,nprot,dt,hbar,ntab,rangev,mmax,nrepmax,iem,irep) 
@@ -314,21 +312,36 @@
 	    if ((i.eq.1).and.(myrank().eq.0)) time0=mpi_wtime()
 	    call counterinit
         do j=1,nstep
-		    call stepstd(i)
+            if ((i.eq.1).and.(j.eq.1).and.(myrank().eq.0)) time3=mpi_wtime()         
+		    call stepstd(i) !!!!!
+            if ((i.eq.1).and.(j.eq.min(10,max(1,int(nstep*0.05_r8)))).and.(myrank().eq.0)) then
+                time4=mpi_wtime()
+                call timedhms(nstep*(time4-time3)/j,day,hour,minute,second)
+        write (6,'(/,''One block time may be: '',i5,'' days'',i5,'' hours'',i5,'' minutes'',f10.3,'' seconds'')') &
+            day,hour,minute,second
+        write (12,'(/,''One block time may be: '',i5,'' days'',i5,'' hours'',i5,'' minutes'',f10.3,'' seconds'')') &
+            day,hour,minute,second
+                call timedhms((nav+neq)*nstep*(time4-time3)/j,day,hour,minute,second)
+        write (6,'(/,''Total time may be: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+            day,hour,minute,second
+        write (12,'(/,''Total time may be: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
+            day,hour,minute,second  
+        write (6,'(/,''Total core hours may be: '',i10,'' hours'')') nint(nproc()*(nav+neq)*nstep*(time4-time3)/j/3600)
+        write (12,'(/,''Total core hours may be: '',i10,'' hours'')') nint(nproc()*(nav+neq)*nstep*(time4-time3)/j/3600)
+            endif    
         enddo
         if (myrank().eq.0) then
-        write (6,'(/,''iteration ='',t30,i14)') it
-        write (12,'(/,''iteration ='',t30,i14)') it
-        call showstat 
+            write (6,'(/,''iteration ='',t30,i14)') it
+            write (12,'(/,''iteration ='',t30,i14)') it
+            call showstat 
         endif
         call checkblkstat
         call update   !collect block averages
-        call updateristra
-        answer=resstring()
-      
+        call updateristra 
         if (myrank().eq.0) then
-        write (6,'(a120)') (answer(k),k=1,size(answer))
-	    write (12,'(a120)') (answer(k),k=1,size(answer))  
+            answer=resstring()
+            write (6,'(a120)') (answer(k),k=1,size(answer))
+	        write (12,'(a120)') (answer(k),k=1,size(answer))  
         endif
       
     ! write out x.      
@@ -374,7 +387,7 @@
     allocate(valnow(0:nchorizo),valaverage(0:nchorizo),valerr(0:nchorizo))
     call resultristra(1,valnow,valaverage,valerr,vpropchorizo)
     open(unit=33,form='formatted',file=vpropchorizo)
-    call result(4,valn,val2,err2) ! #4 is the denominator 
+    call resultest(4,val2,err2) ! #4 is the denominator 
     do j=0,nchorizo
         val1=valaverage(j)
         err1=valerr(j)  
@@ -388,13 +401,15 @@
      
     if ((i.eq.1).and.(myrank().eq.0)) then
         time1=mpi_wtime()  
-        write (6,'(/,''Time for one block ='',f10.3,'' minutes'')') (time1-time0)/60.
-        write (12,'(/,''Time for one block ='',f10.3,'' minutes'')') (time1-time0)/60.
+        write (6,'(/,''Time for one block ='',f10.3,'' minutes'')') (time1-time0)/60
+        write (12,'(/,''Time for one block ='',f10.3,'' minutes'')') (time1-time0)/60
         call timedhms((nav+neq)*(time1-time0),day,hour,minute,second)
         write (6,'(/,''Total time estimation: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
             day,hour,minute,second
         write (12,'(/,''Total time estimation: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
-            day,hour,minute,second                   
+            day,hour,minute,second    
+        write (6,'(/,''Total core hours estimation: '',i10,'' hours'')') nint(nproc()*(nav+neq)*(time1-time0)/3600)
+        write (12,'(/,''Total core hours estimation: '',i10,'' hours'')') nint(nproc()*(nav+neq)*(time1-time0)/3600)      
     endif
 
     enddo
@@ -406,7 +421,9 @@
     write (6,'(/,''Total time: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
            day,hour,minute,second
     write (12,'(/,''Total time: '',i10,'' days'',i10,'' hours'',i10,'' minutes'',f10.3,'' seconds'')') &
-           day,hour,minute,second                
+           day,hour,minute,second   
+    write (6,'(/,''Total core hours: '',i10,'' hours'')') nint(nproc()*(time2-time00)/3600)
+    write (12,'(/,''Total core hours: '',i10,'' hours'')') nint(nproc()*(time2-time00)/3600)     
     close (12)
     endif
    
@@ -565,9 +582,10 @@
 	    if (myrank().eq.0) call showstat 
         call update   !collect block averages
         call updateristra
-        answer=resstring()
+        
       
         if (myrank().eq.0) then
+            answer=resstring()
             write (6,'(/,''iteration = '',t30,i14)') it    
             write (6,'(a120)') (answer(k),k=1,size(answer))
 	        write (12,'(/,''iteration = '',t30,i14)') it
@@ -617,7 +635,7 @@
     allocate(valnow(0:nchorizo),valaverage(0:nchorizo),valerr(0:nchorizo))
     call resultristra(1,valnow,valaverage,valerr,vpropchorizo)
     open(unit=33,form='formatted',file=vpropchorizo)
-    call result(4,valn,val2,err2) ! #4 is the denominator 
+    call resultest(4,val2,err2) ! #4 is the denominator 
     do j=0,nchorizo
         val1=valaverage(j)
         err1=valerr(j)  

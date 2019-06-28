@@ -50,9 +50,9 @@ contains
 	    ,nprotin,navin,nstepin,neqin)
     use math
     use v6stepcalc
-    real(kind=r8) :: hbarin,dtin,elin,dcut,repprobin,ecutin,etrialin &
+    real(kind=r8) :: hbarin,dtin &
                     ,x0stepin,mov1stepin,mov2stepin,shftstepin
-    integer(kind=i4) :: npartin,nchorizoin,nrepmaxin,irepin,mmaxin,nstepdecorin,nrhobinin,nprotin,ntabin &
+    integer(kind=i4) :: npartin,nchorizoin,nrepmaxin,irepin,mmaxin,nstepdecorin,nrhobinin,nprotin &
                         ,navin,nstepin,neqin
     integer(kind=i4) :: i,nristra
     logical :: icorrchkin
@@ -111,25 +111,17 @@ contains
     call combin(npart,nprot,nisospin) ! give value for nisospin, n=4, it is 4C2= 6.
     nbasis=nspin*nisospin ! n=4, it is 96.   
     allocate(cwtbegin(0:nspin-1,nisospin),cwtend(0:nspin-1,nisospin) &
-    ,cwtl2r(0:nchorizo,0:nspin-1,nisospin),cwtr2l(0:nchorizo,0:nspin-1,nisospin))
+    ,cwtl2r(0:nspin-1,nisospin,0:nchorizo),cwtr2l(0:nspin-1,nisospin,0:nchorizo))
     allocate(cwtbegin1(0:nspin-1,nisospin),cwtend1(0:nspin-1,nisospin) &
-    ,cwtl2r1(0:nchorizo,0:nspin-1,nisospin),cwtr2l1(0:nchorizo,0:nspin-1,nisospin))
+    ,cwtl2r1(0:nspin-1,nisospin,0:nchorizo),cwtr2l1(0:nspin-1,nisospin,0:nchorizo))
     allocate(cwtbeginnew(0:nspin-1,nisospin),cwtendnew(0:nspin-1,nisospin) &
-    ,cwtl2rnew(0:nchorizo,0:nspin-1,nisospin),cwtr2lnew(0:nchorizo,0:nspin-1,nisospin))
+    ,cwtl2rnew(0:nspin-1,nisospin,0:nchorizo),cwtr2lnew(0:nspin-1,nisospin,0:nchorizo))
     allocate(cwtbeginnew1(0:nspin-1,nisospin),cwtendnew1(0:nspin-1,nisospin) &
-    ,cwtl2rnew1(0:nchorizo,0:nspin-1,nisospin),cwtr2lnew1(0:nchorizo,0:nspin-1,nisospin))   
+    ,cwtl2rnew1(0:nspin-1,nisospin,0:nchorizo),cwtr2lnew1(0:nspin-1,nisospin,0:nchorizo))   
     allocate(cwtground(0:nspin-1,nisospin))
     allocate(invspin(nbasis),invispin(nbasis))  
     call getcwtgnd(cwtground,invspin,invispin)
-   
-    irepstepmonmax=10*nchorizo
-    allocate(repstepct1(0:irepstepmonmax),repstepct2(0:irepstepmonmax))
-    allocate(repstepct1sum(0:irepstepmonmax),repstepct2sum(0:irepstepmonmax))
-    repstepct1=0
-    repstepct2=0
-    repstepct1sum=0
-    repstepct2sum=0  
-   
+      
     nav=navin
     nstep=nstepin
     neq=neqin
@@ -138,9 +130,16 @@ contains
     allocate(ibisectstuck(nav+neq))
     ibisectstuck=0 ! check how many times bisection stuck.    
     
-    if (nrepmax /= 0) then
+    if (nrepmax /= 0) then ! for reptation.
+        irepstepmonmax=10*nchorizo
+        allocate(repstepct1(0:irepstepmonmax),repstepct2(0:irepstepmonmax))
+        allocate(repstepct1sum(0:irepstepmonmax),repstepct2sum(0:irepstepmonmax))
+        repstepct1=0
+        repstepct2=0
+        repstepct1sum=0
+        repstepct2sum=0         
         allocate(ireparrowhistory(0:nav*nstep))
-        ireparrowhistory=0
+        ireparrowhistory=0 
     endif
    
     return
@@ -183,29 +182,28 @@ contains
     return
     end subroutine chorizoallout   
    
-    subroutine stepchorizoinit(isitein,infilein,outfilein) ! initialize the position, calculate the weights for each bead. l2r,r2l
+    subroutine stepchorizoinit(isitein,infilein,outfilein) ! call stepinit first
+! initialize the position, calculate the weights for each bead. l2r,r2l
     use wavefunction
     use v6stepcalc
+    use estimator
     use random
     use brut
     use mympi
     integer(kind=i4) :: i,j,k,nptot,ixtemp,icheck,l
-    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart),xtmp(3,npart) &
-                    ,val1,val2,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin),cwta(25,0:nspin-1,nisospin) &
-                        ,cwta1(25,0:nspin-1,nisospin),cwta2(25,0:nspin-1,nisospin) &
-                        ,cwt1(0:nspin-1,nisospin),cwt2(0:nspin-1,nisospin) 
+    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart) &
+                    ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
     real(kind=r8) ::  rangex
     character(len=70) :: infilein,outfilein  
     logical :: isitein
-    real(kind=r8) :: psi20,psi2n,e0,en,e,psi2,pe0,pen,psi2a(1,1),psi2b
-    real(kind=r8) :: d20(3,npart),f0(3,npart),d2n(3,npart),fn(3,npart) 
-    real(kind=r8) :: vn,vd,rgl,rgr,rg,rf,absf,vnum,vdenom,vnke,vnpev6,vnpeem
-    complex(kind=r8) :: f
+    real(kind=r8) :: psi20,psi2n
+    real(kind=r8) :: vn,vd,rf,vnke,vnpev6,vnpeem,vnum,vdenom,rm,rmsq
     real(kind=r8), parameter :: dxx=.02d0  
     integer(kind=i4), allocatable :: icheck1d(:)
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout
+    character(len=120), dimension(:), allocatable :: answer
    
     ! call stepinit first   
     isite=isitein
@@ -304,22 +302,22 @@ contains
     xl=ristra(0)%x 
 
     call corop(xl,iplo,jplo,cwtbegin) ! psitcwt    
-    call v6propr(xl,-1,cwtbegin,cwtl2r(0,:,:))
+    call v6propr(xl,-1,cwtbegin,cwtl2r(:,:,0))
     do i=1,nchorizo-1
 	    x=ristra(i)%x
-	    call v6proplr(x,x,-1,cwtl2r(i-1,:,:),cwtl2r(i,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,i-1),cwtl2r(:,:,i))
     enddo 
 
-    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
     ! right to left  
 
     call corop(xr,ipro,jpro,cwtend)
-    call v6propr(xr,-1,cwtend,cwtr2l(nchorizo,:,:))
+    call v6propr(xr,-1,cwtend,cwtr2l(:,:,nchorizo))
     do j=nchorizo-1,1,-1
 	    x=ristra(j)%x
-	    call v6proplr(x,x,-1,cwtr2l(j+1,:,:),cwtr2l(j,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,j+1),cwtr2l(:,:,j))
     enddo
-    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))
+    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))
     
     call hpsi(ristra(0),ristra(nchorizo),vn,vd,vnke,vnpev6,vnpeem,psi20,psi2n,rf,icheck)  
    
@@ -341,14 +339,37 @@ contains
         enddo 
         close(9)  
         write(6,*) 'check hpsi fail! Bug x recorded in outfile! use hpsi to check!'
-        call abort         
+        call abort 
      else
-        write(6,*) 'hpsi pass!'       
+        write (6,'(/,''hpsi check pass!'')') 
+	    write (12,'(/,''hpsi check pass!'')')          
      endif  
      deallocate(icheck1d)
      deallocate(xall,iplall,jplall,iprall,jprall)     
     endif
     
+    call zerest
+    call zerrhodist     
+    vnum=vn
+    vdenom=vd
+    call addval(3,vnum,1.0_r8)
+    call addval(4,vdenom,1.0_r8)
+    call addval(5,rf,1.0_r8)
+    call funcrmsq(ristra(nchorizomid)%x,rm,rmsq)
+    call addval(6,rmsq,1.0_r8)
+    call addval(7,rm,1.0_r8)
+    call samplerhodistrbt(ristra(nchorizomid)%x,nchorizomid,rhodistout)	  
+    call addval(8,rhodistout(0),1.0_r8)    
+    call update   !collect block averages
+    if (myrank().eq.0) then
+        allocate(answer(11))
+        answer=resstring()
+        write (6,'(a120)') (answer(k),k=1,size(answer))
+	    write (12,'(a120)') (answer(k),k=1,size(answer)) 
+        deallocate(answer)
+        write (6,'(/,''initial config calculated.'')') 
+	    write (12,'(/,''initial config calculated.'')')    
+    endif    
     return
     end subroutine stepchorizoinit 
    
@@ -358,12 +379,9 @@ contains
     use v6stepcalc
     use brut 
     use random
-    integer(kind=i4) :: i,j,k
-    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin)	
-    real(kind=r8) ::  rangex,newp,oldp,rn(1)
-    character(len=70) :: infilein,outfilein  
-    logical :: isitein
+    integer(kind=i4) :: i,j
+    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart)
+    real(kind=r8) ::  newp,oldp,rn(1)
    
     iclrtot=iclrtot+1
    
@@ -377,15 +395,15 @@ contains
     ! right to left   
     xr=ristra(nchorizo)%x 
     call corop(xr,ipr,jpr,cwtendnew)
-    call v6propr(xr,-1,cwtendnew,cwtr2lnew(nchorizo,:,:))
+    call v6propr(xr,-1,cwtendnew,cwtr2lnew(:,:,nchorizo))
     do j=nchorizo-1,1,-1
 	    x=ristra(j)%x
-	    call v6proplr(x,x,-1,cwtr2lnew(j+1,:,:),cwtr2lnew(j,:,:))
+	    call v6proplr(x,x,-1,cwtr2lnew(:,:,j+1),cwtr2lnew(:,:,j))
     enddo
-    call v6propl(xl,-1,cwtr2lnew(1,:,:),cwtr2lnew(0,:,:))
+    call v6propl(xl,-1,cwtr2lnew(:,:,1),cwtr2lnew(:,:,0))
    
-    newp=abs(real( sum(conjg(cwtbeginnew(:,:))*cwtr2lnew(0,:,:)) )) 	  
-    oldp=abs(real( sum(conjg(cwtbegin(:,:))*cwtr2l(0,:,:)) ))   
+    newp=abs(real( sum(conjg(cwtbeginnew(:,:))*cwtr2lnew(:,:,0)) )) 	  
+    oldp=abs(real( sum(conjg(cwtbegin(:,:))*cwtr2l(:,:,0)) ))   
    
     rn=randn(1)
     
@@ -394,12 +412,12 @@ contains
         iclr=iclr+1
            
     ! l2r        
-    call v6propr(xl,-1,cwtbeginnew,cwtl2rnew(0,:,:))
+    call v6propr(xl,-1,cwtbeginnew,cwtl2rnew(:,:,0))
     do i=1,nchorizo-1
 	    x=ristra(i)%x
-	    call v6proplr(x,x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
+	    call v6proplr(x,x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
     enddo   
-    call v6propl(xr,-1,cwtl2rnew(nchorizo-1,:,:),cwtl2rnew(nchorizo,:,:))
+    call v6propl(xr,-1,cwtl2rnew(:,:,nchorizo-1),cwtl2rnew(:,:,nchorizo))
 
         cwtbegin=cwtbeginnew
         cwtend=cwtendnew
@@ -423,21 +441,25 @@ contains
     use random
     use brut
     use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
+    real(kind=r8) :: rn(1),rm,rmsq
     real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,nblocknowin
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
+	                ,x0tot(3,npart,0:nchorizo)
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout
+    integer(kind=i4) :: i,l,ixd,lmax,icheck,ixtemp,nblocknowin
+    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rf,vnum,vdenom &
                     ,sum1,sum2
     real(kind=r8) :: psi20,psi2n
-    complex(kind=r8) :: f
     integer(kind=i4), allocatable :: icheck1d(:)
     real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
     integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:) ! for mpi_gather
-    integer(kind=i4) :: iounit
-   
+! set rate parameters for different kind of moves.    
+    real(kind=r8), parameter :: rb=1 ! 0.9   bisection rate(reptation if enabled is in it.)
+    real(kind=r8), parameter :: r1=0.95 ! move 1 by 1    
+    real(kind=r8), parameter :: r2=0.967 ! move all beads  
+    real(kind=r8), parameter :: r3=0.984 ! shift beads
+    real(kind=r8), parameter :: r23=1  ! move all + shift     
+      
     nblocknow=nblocknowin
     
     icstepstd=icstepstd+1
@@ -464,11 +486,11 @@ contains
 	    !call stdmove
 	  
        
-        rb=0.9
-        r1=0.95
-        r2=0.967
-        r3=0.984
-        r23=1
+        !rb=1 ! 0.9   bisection rate(reptation if enabled is in it.)
+        !r1=0.95 ! move 1 by 1    
+        !r2=0.967 ! move all beads  
+        !r3=0.984 ! shift beads
+        !r23=1  ! move all + shift     
      
         !rb=0.
         !r1=0.
@@ -524,22 +546,7 @@ contains
 	            if (icstepstd.eq.nstep) then
 	                ixd=icstepstd
 	                lmax=nstep                   
-                    call corrchk(xin,ixd,corr,lmax)   
-	                OPEN(newunit=iounit,FILE='xin.txt',FORM='FORMATTED')
-                    WRITE(iounit,'(2x,2(G15.8,2x))') 'k','x' 
-                    do j=1,nstep 
-	                   WRITE(iounit,'(2x,2(G15.8,2x))') j,xin(j)	
-                    enddo
-	                close(iounit)
-                    
-                 !   call corrchk(yin,ixd,corr,lmax)   
-	                !OPEN(newunit=iounit,FILE='xin.txt',FORM='FORMATTED')
-                 !   WRITE(iounit,'(2x,2(G15.8,2x))') 'k','vn' 
-                 !   do j=1,nstep 
-	                !   WRITE(iounit,'(2x,2(G15.8,2x))') j,yin(j)	
-                 !   enddo
-	                !close(iounit)                    
-                        
+                    call corrchk(xin,ixd,corr,lmax)       
                 endif   
             endif
         endif
@@ -576,12 +583,12 @@ contains
         call gather(icheck,icheck1d)
         call gather(psi20,psi201d)
         call gather(psi2n,psi2n1d)  
-   
-        call addall(repstepct1,repstepct1sum)
-        call addall(repstepct2,repstepct2sum)   
-        sum1=sum(repstepct1sum)
-        sum2=sum(repstepct2sum)   
-   
+        if (nrepmax /= 0) then
+            call addall(repstepct1,repstepct1sum)
+            call addall(repstepct2,repstepct2sum)   
+            sum1=sum(repstepct1sum)
+            sum2=sum(repstepct2sum)   
+        endif
         if (myrank().eq.0) then
             if (sum(icheck1d) /= 0) then
                 open(unit=19,form='formatted',file='bugbeads.out',position='rewind')
@@ -703,12 +710,11 @@ contains
     use random
     use mympi
     use estimator
-    integer(kind=i4) :: i,j,k
-    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart),gauss(3,npart),xr1(3,npart),xl1(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin)	
-    real(kind=r8) ::  rangex,newp,oldp,rn(1),newp1,oldp1
-    character(len=70) :: infilein,outfilein  
-    logical :: isitein
+    integer(kind=i4) :: i,j
+    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),gauss(3,npart)
+    real(kind=r8) ::  newp,oldp,rn(1)
+    
+    if (nrepmax.eq.0) return
     
     icrephist=icrephist+1
     icreptot=icreptot+1
@@ -779,15 +785,15 @@ contains
     ! right to left   
     xr=ristranew(nchorizo)%x 
     call corop(xr,ipro,jpro,cwtendnew)
-    call v6propr(xr,-1,cwtendnew,cwtr2lnew(nchorizo,:,:))
+    call v6propr(xr,-1,cwtendnew,cwtr2lnew(:,:,nchorizo))
     do j=nchorizo-1,1,-1
 	    x=ristranew(j)%x
-	    call v6proplr(x,x,-1,cwtr2lnew(j+1,:,:),cwtr2lnew(j,:,:))
+	    call v6proplr(x,x,-1,cwtr2lnew(:,:,j+1),cwtr2lnew(:,:,j))
     enddo
-    call v6propl(xl,-1,cwtr2lnew(1,:,:),cwtr2lnew(0,:,:))
+    call v6propl(xl,-1,cwtr2lnew(:,:,1),cwtr2lnew(:,:,0))
    
-    newp=abs(real( sum(conjg(cwtbeginnew(:,:))*cwtr2lnew(0,:,:)) )) 	  
-    oldp=abs(real( sum(conjg(cwtbegin(:,:))*cwtr2l(0,:,:)) ))   
+    newp=abs(real( sum(conjg(cwtbeginnew(:,:))*cwtr2lnew(:,:,0)) )) 	  
+    oldp=abs(real( sum(conjg(cwtbegin(:,:))*cwtr2l(:,:,0)) ))   
    
     rn=randn(1)
     
@@ -807,12 +813,12 @@ contains
         endif
    
     ! l2r        
-        call v6propr(xl,-1,cwtbeginnew,cwtl2rnew(0,:,:))
+        call v6propr(xl,-1,cwtbeginnew,cwtl2rnew(:,:,0))
         do i=1,nchorizo-1
 	    x=ristra(i)%x
-	    call v6proplr(x,x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
+	    call v6proplr(x,x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
         enddo   
-        call v6propl(xr,-1,cwtl2rnew(nchorizo-1,:,:),cwtl2rnew(nchorizo,:,:))
+        call v6propl(xr,-1,cwtl2rnew(:,:,nchorizo-1),cwtl2rnew(:,:,nchorizo))
         cwtbegin=cwtbeginnew
         cwtend=cwtendnew
         cwtl2r=cwtl2rnew
@@ -850,13 +856,12 @@ contains
     use random
     use mympi
     use estimator
-    integer(kind=i4) :: i,j,k
-    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),x0(3,npart),gauss(3,npart),xr1(3,npart),xl1(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin)	
-    real(kind=r8) ::  rangex,newp,oldp,rn(1),newp1,oldp1
-    character(len=70) :: infilein,outfilein  
-    logical :: isitein
+    integer(kind=i4) :: i,j
+    real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart),gauss(3,npart),xr1(3,npart),xl1(3,npart)
+    real(kind=r8) ::  newp,oldp,rn(1),newp1,oldp1 
    
+    if (nrepmax.eq.0) return
+    
     icrephist=icrephist+1
     icreptot=icreptot+1
     ristraold(0:nchorizo)=ristra(0:nchorizo)
@@ -876,29 +881,29 @@ contains
     ! l2r    
     xl=ristranew(0)%x
     call corop(xl,iplo,jplo,cwtbeginnew) ! psit cwt    
-    call v6propr(xl,-1,cwtbeginnew,cwtl2rnew(0,:,:))
+    call v6propr(xl,-1,cwtbeginnew,cwtl2rnew(:,:,0))
     do i=1,nchorizo-1
 	    x=ristranew(i)%x
-	    call v6proplr(x,x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
+	    call v6proplr(x,x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
     enddo 
-    cwtl2rnew1(0:nchorizo-1,:,:)=cwtl2rnew(0:nchorizo-1,:,:)
+    cwtl2rnew1(:,:,0:nchorizo-1)=cwtl2rnew(:,:,0:nchorizo-1)
     xr=ristranew(nchorizo)%x 
     xr1=ristranew1(nchorizo)%x 
-    call v6propl(xr,-1,cwtl2rnew(nchorizo-1,:,:),cwtl2rnew(nchorizo,:,:)) 
-    call v6propl(xr1,-1,cwtl2rnew1(nchorizo-1,:,:),cwtl2rnew1(nchorizo,:,:))     
+    call v6propl(xr,-1,cwtl2rnew(:,:,nchorizo-1),cwtl2rnew(:,:,nchorizo)) 
+    call v6propl(xr1,-1,cwtl2rnew1(:,:,nchorizo-1),cwtl2rnew1(:,:,nchorizo))     
     call corop(xr,ipro,jpro,cwtendnew)  
     call corop(xr1,ipro,jpro,cwtendnew1)  
 
-    newp=abs(real( sum(conjg(cwtl2rnew(nchorizo,:,:))*cwtendnew(:,:)) )) 	 
-    newp1=abs(real( sum(conjg(cwtl2rnew1(nchorizo,:,:))*cwtendnew1(:,:)) )) 
+    newp=abs(real( sum(conjg(cwtl2rnew(:,:,nchorizo))*cwtendnew(:,:)) )) 	 
+    newp1=abs(real( sum(conjg(cwtl2rnew1(:,:,nchorizo))*cwtendnew1(:,:)) )) 
     
-    oldp=abs(real( sum(conjg(cwtbegin(:,:))*cwtr2l(0,:,:)) ))   
+    oldp=abs(real( sum(conjg(cwtbegin(:,:))*cwtr2l(:,:,0)) ))   
     
     xl1=2.*ristra(1)%x-ristra(0)%x
     call corop(xl1,iplo,jplo,cwtbegin1) 
-    call v6propl(xl1,-1,cwtr2l(1,:,:),cwtr2l1(0,:,:))    
+    call v6propl(xl1,-1,cwtr2l(:,:,1),cwtr2l1(:,:,0))    
     
-    oldp1=abs(real( sum(conjg(cwtbegin1(:,:))*cwtr2l1(0,:,:)) ))   
+    oldp1=abs(real( sum(conjg(cwtbegin1(:,:))*cwtr2l1(:,:,0)) ))   
     
     rn=randn(1)
     if ( rn(1) < ((newp+newp1)/(oldp+oldp1)) ) then    
@@ -912,12 +917,12 @@ contains
         if ( rn(1) < (newp/(newp+newp1)) ) then
         ristra(0:nchorizo)=ristranew(0:nchorizo)       
     ! r2l        
-        call v6propr(xr,-1,cwtendnew,cwtr2lnew(nchorizo,:,:))
+        call v6propr(xr,-1,cwtendnew,cwtr2lnew(:,:,nchorizo))
         do j=nchorizo-1,1,-1
 	        x=ristra(j)%x
-	        call v6proplr(x,x,-1,cwtr2lnew(j+1,:,:),cwtr2lnew(j,:,:))
+	        call v6proplr(x,x,-1,cwtr2lnew(:,:,j+1),cwtr2lnew(:,:,j))
         enddo
-        call v6propl(xl,-1,cwtr2lnew(1,:,:),cwtr2lnew(0,:,:))  
+        call v6propl(xl,-1,cwtr2lnew(:,:,1),cwtr2lnew(:,:,0))  
         cwtbegin=cwtbeginnew
         cwtend=cwtendnew
         cwtl2r=cwtl2rnew 
@@ -925,12 +930,12 @@ contains
         else
         ristra(0:nchorizo)=ristranew1(0:nchorizo)   
     ! r2l 
-        call v6propr(xr1,-1,cwtendnew1,cwtr2lnew1(nchorizo,:,:))
+        call v6propr(xr1,-1,cwtendnew1,cwtr2lnew1(:,:,nchorizo))
         do j=nchorizo-1,1,-1
 	        x=ristra(j)%x
-	        call v6proplr(x,x,-1,cwtr2lnew1(j+1,:,:),cwtr2lnew1(j,:,:))
+	        call v6proplr(x,x,-1,cwtr2lnew1(:,:,j+1),cwtr2lnew1(:,:,j))
         enddo
-        call v6propl(xl,-1,cwtr2lnew1(1,:,:),cwtr2lnew1(0,:,:))     
+        call v6propl(xl,-1,cwtr2lnew1(:,:,1),cwtr2lnew1(:,:,0))     
         cwtbegin=cwtbeginnew
         cwtend=cwtendnew1
         cwtl2r=cwtl2rnew1  
@@ -973,28 +978,28 @@ contains
     xl=ristranew(0)%x
     xl1=ristranew1(0)%x
     call corop(xr,ipro,jpro,cwtendnew)     
-    call v6propr(xr,-1,cwtendnew,cwtr2lnew(nchorizo,:,:))
+    call v6propr(xr,-1,cwtendnew,cwtr2lnew(:,:,nchorizo))
     do j=nchorizo-1,1,-1
         x=ristranew(j)%x
-        call v6proplr(x,x,-1,cwtr2lnew(j+1,:,:),cwtr2lnew(j,:,:))
+        call v6proplr(x,x,-1,cwtr2lnew(:,:,j+1),cwtr2lnew(:,:,j))
     enddo
-    cwtr2lnew1(1:nchorizo,:,:)=cwtr2lnew(1:nchorizo,:,:)
-    call v6propl(xl,-1,cwtr2lnew(1,:,:),cwtr2lnew(0,:,:))      
-    call v6propl(xl1,-1,cwtr2lnew(1,:,:),cwtr2lnew1(0,:,:))    
+    cwtr2lnew1(:,:,1:nchorizo)=cwtr2lnew(:,:,1:nchorizo)
+    call v6propl(xl,-1,cwtr2lnew(:,:,1),cwtr2lnew(:,:,0))      
+    call v6propl(xl1,-1,cwtr2lnew(:,:,1),cwtr2lnew1(:,:,0))    
 
     call corop(xl,iplo,jplo,cwtbeginnew)
     call corop(xl1,iplo,jplo,cwtbeginnew1)   
     
-    newp=abs(real( sum(conjg(cwtbeginnew(:,:))*cwtr2lnew(0,:,:)) ))  
-    newp1=abs(real( sum(conjg(cwtbeginnew1(:,:))*cwtr2lnew1(0,:,:)) )) 
+    newp=abs(real( sum(conjg(cwtbeginnew(:,:))*cwtr2lnew(:,:,0)) ))  
+    newp1=abs(real( sum(conjg(cwtbeginnew1(:,:))*cwtr2lnew1(:,:,0)) )) 
     
-    oldp=abs(real( sum(conjg(cwtbegin(:,:))*cwtr2l(0,:,:)) ))   
+    oldp=abs(real( sum(conjg(cwtbegin(:,:))*cwtr2l(:,:,0)) ))   
     
     xr1=2.*ristra(nchorizo-1)%x-ristra(nchorizo)%x
     call corop(xr1,ipro,jpro,cwtend1)   
-    call v6propl(xr1,-1,cwtl2r(nchorizo-1,:,:),cwtl2r1(nchorizo,:,:))   
+    call v6propl(xr1,-1,cwtl2r(:,:,nchorizo-1),cwtl2r1(:,:,nchorizo))   
     
-    oldp1=abs(real( sum(conjg(cwtl2r1(nchorizo,:,:))*cwtend1(:,:)) ))   
+    oldp1=abs(real( sum(conjg(cwtl2r1(:,:,nchorizo))*cwtend1(:,:)) ))   
     
     rn=randn(1)
     if ( rn(1) < ((newp+newp1)/(oldp+oldp1)) ) then    
@@ -1008,12 +1013,12 @@ contains
         if ( rn(1) < (newp/(newp+newp1)) ) then
         ristra(0:nchorizo)=ristranew(0:nchorizo)              
     ! l2r
-        call v6propr(xl,-1,cwtbeginnew,cwtl2rnew(0,:,:))
+        call v6propr(xl,-1,cwtbeginnew,cwtl2rnew(:,:,0))
         do i=1,nchorizo-1
 	        x=ristra(i)%x
-	        call v6proplr(x,x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
+	        call v6proplr(x,x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
         enddo   
-        call v6propl(xr,-1,cwtl2rnew(nchorizo-1,:,:),cwtl2rnew(nchorizo,:,:))       
+        call v6propl(xr,-1,cwtl2rnew(:,:,nchorizo-1),cwtl2rnew(:,:,nchorizo))       
         cwtbegin=cwtbeginnew
         cwtend=cwtendnew
         cwtl2r=cwtl2rnew 
@@ -1023,12 +1028,12 @@ contains
      
         ristra(0:nchorizo)=ristranew1(0:nchorizo)   
     ! l2r
-        call v6propr(xl1,-1,cwtbeginnew1,cwtl2rnew1(0,:,:))
+        call v6propr(xl1,-1,cwtbeginnew1,cwtl2rnew1(:,:,0))
         do i=1,nchorizo-1
 	        x=ristra(i)%x
-	        call v6proplr(x,x,-1,cwtl2rnew1(i-1,:,:),cwtl2rnew1(i,:,:))
+	        call v6proplr(x,x,-1,cwtl2rnew1(:,:,i-1),cwtl2rnew1(:,:,i))
         enddo   
-        call v6propl(xr,-1,cwtl2rnew1(nchorizo-1,:,:),cwtl2rnew1(nchorizo,:,:))       
+        call v6propl(xr,-1,cwtl2rnew1(:,:,nchorizo-1),cwtl2rnew1(:,:,nchorizo))       
         cwtbegin=cwtbeginnew1
         cwtend=cwtendnew
         cwtl2r=cwtl2rnew1 
@@ -1058,141 +1063,161 @@ contains
     return
     end subroutine reptation1   
    
-   
-    subroutine rqmcmonitor
-    end subroutine rqmcmonitor
-   
-   
-    subroutine pathprocess
-    end subroutine pathprocess
-   
-   
-   
-   
-   
-   
-   
+
     subroutine bisect
     use random
-    real(kind=r8) :: rn(1)
-    integer(kind=i4) :: ileftbisect,irightbisect,n1,n2,irn
- 
+    !real(kind=r8) :: rn(1)
+    integer(kind=i4) :: ileftbisect,irightbisect,mmaxnow,mmaxnow2
+    
     icbisecttot=icbisecttot+1   
    
     if (nbisect.lt.nchorizo) then
-    call bisectpicksliceswide(ileftbisect,irightbisect) ! pick the ileftbisect here
+        
+        mmaxnow=mmax
+        
+        call bisectpicksliceswide(ileftbisect,irightbisect) ! pick the ileftbisect here
     
-        !write(12,*) 'ileft,iright=', ileftbisect,irightbisect,nbisect,nbisecthalf
-        !write(6,*) 'ileft,iright=', ileftbisect,irightbisect,nbisect,nbisecthalf
+            !write(12,*) 'ileft,iright=', ileftbisect,irightbisect,nbisect,nbisecthalf
+            !write(6,*) 'ileft,iright=', ileftbisect,irightbisect,nbisect,nbisecthalf
     
-    if (ileftbisect.le.(nchorizo-nbisect)) then
+        if (ileftbisect.le.(nchorizo-nbisect)) then
      
-        !call bisectv6improve(ileftbisect)
-        !call bisectv6a(ileftbisect)
-        call bisectv6b(ileftbisect)
-        !write(6,*) 'bisectv6improve called =', ileftbisect
+            !call bisectv6improve(ileftbisect)
+            !call bisectv6a(ileftbisect)
+        
+        
+            !call bisectv6b(ileftbisect)
+            call bisectv6bflex(ileftbisect,mmaxnow)
+        
+            !write(6,*) 'bisectv6improve called =', ileftbisect
      
-    else
-
-        !rn=randn(1)
-        !if (rn(1) <= 0.5) then
-            call bisectv6lb   
-        !else
-            call bisectv6rb  
-        !endif
+        else
+            
+            !rn=randn(1)
+            !if (rn(1) < 0.5) then
+            !    call bisectv6lbflex(mmaxnow)  
+            !    call bisectv6rbflex(mmaxnow)    
+            !else
+            !    call bisectv6rbflex(mmaxnow)    
+            !    call bisectv6lbflex(mmaxnow)    
+            !endif
+        
+            
+            mmaxnow2=mmax-1
+            
+            if (  ileftbisect <= nchorizo-2**(mmax-1)  ) then     
+                call bisectv6bflex(ileftbisect,mmaxnow2)
+                call bisectv6rbflex(mmaxnow2)  
+                call bisectv6lbflex(mmaxnow2)    
+            else
+                call bisectv6rbflex(mmaxnow2)  
+                call bisectv6lbflex(mmaxnow2)  
+                call bisectv6bflex(  nbisect-(nchorizo-ileftbisect)-2**(mmax-1),mmaxnow2)
+            endif
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
           
-    !!! reptation        
-    !    if (nrepmax == 1) then
-    !     !call reptation1 
-    !        call reptation
-    !    else 
-    !        if (nrepmax /= 0) then
-    !            call reptation  
-    !        endif
-    !    endif
-    !!! reptation, consider a bisection-ike reptation.
+        !!! reptation        
+        !    if (nrepmax == 1) then
+        !     !call reptation1 
+        !        call reptation
+        !    else 
+        !        if (nrepmax /= 0) then
+        !            call reptation  
+        !        endif
+        !    endif
+        !!! reptation, consider a bisection-ike reptation maybe.
    
 
-    ! below are mixed move, turn off now.  
-    !----------------------------------------------      
-        !rn=randn(1)
-        !if (rn(1)<=0.99999) then  
+        ! below are mixed move, turn off now.  
+        !----------------------------------------------      
+            !rn=randn(1)
+            !if (rn(1)<=0.99999) then  
         
-    ! new improved  before 2019-4-7        
-        !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
-        ! !write(6,*) 'ileftbisect -', ileftbisect    
-        ! !call bisectv6improve(nchorizo-nbisect)
-        ! call bisectv6a(nchorizo-nbisect)
-        ! !write(6,*) 'bisectv6r called =', ileftbisect
-        ! call bisectv6ra
-        ! !write(6,*) 'bisectv6l called =', ileftbisect 
-        ! call bisectv6la      
-        !else
-        ! !write(6,*) 'ileftbisect +', ileftbisect
-        ! !write(6,*) 'bisectv6r called =', ileftbisect   
-        ! call bisectv6ra
-        ! !write(6,*) 'bisectv6l called =', ileftbisect 
-        ! call bisectv6la 
-        ! !call bisectv6improve(0) 
-        ! call bisectv6a(0)
-        !endif           
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!         
+        ! new improved  before 2019-4-7        
+            !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
+            ! !write(6,*) 'ileftbisect -', ileftbisect    
+            ! !call bisectv6improve(nchorizo-nbisect)
+            ! call bisectv6a(nchorizo-nbisect)
+            ! !write(6,*) 'bisectv6r called =', ileftbisect
+            ! call bisectv6ra
+            ! !write(6,*) 'bisectv6l called =', ileftbisect 
+            ! call bisectv6la      
+            !else
+            ! !write(6,*) 'ileftbisect +', ileftbisect
+            ! !write(6,*) 'bisectv6r called =', ileftbisect   
+            ! call bisectv6ra
+            ! !write(6,*) 'bisectv6l called =', ileftbisect 
+            ! call bisectv6la 
+            ! !call bisectv6improve(0) 
+            ! call bisectv6a(0)
+            !endif           
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!         
          
-    ! half lr bisection        
-        !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
-        ! !write(6,*) 'ileftbisect -', ileftbisect    
-        ! call bisectv6improve(nchorizo-nbisect)
-        ! !write(6,*) 'bisectv6r called =', ileftbisect
-        ! call bisectv6rhalf(nchorizo)
-        ! call bisectv6lhalf(0)      
-        !else
-        ! !write(6,*) 'ileftbisect +', ileftbisect 
-        ! call bisectv6rhalf(nchorizo)
-        !! write(6,*) 'bisectv6l called =', ileftbisect 
-        ! call bisectv6lhalf(0) 
-        ! call bisectv6improve(0) 
-        !endif  
-    !     
+        ! half lr bisection        
+            !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
+            ! !write(6,*) 'ileftbisect -', ileftbisect    
+            ! call bisectv6improve(nchorizo-nbisect)
+            ! !write(6,*) 'bisectv6r called =', ileftbisect
+            ! call bisectv6rhalf(nchorizo)
+            ! call bisectv6lhalf(0)      
+            !else
+            ! !write(6,*) 'ileftbisect +', ileftbisect 
+            ! call bisectv6rhalf(nchorizo)
+            !! write(6,*) 'bisectv6l called =', ileftbisect 
+            ! call bisectv6lhalf(0) 
+            ! call bisectv6improve(0) 
+            !endif  
+        !     
 
-    ! old lr bisection        
-        !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
-        ! !write(6,*) 'ileftbisect -', ileftbisect    
-        ! call stdmove1rangefastv6(nchorizo,nchorizo)  
-        ! !write(6,*) 'bisectv6r called =', ileftbisect
-        ! call bisectv6r
-        ! call bisectv6l      
-        !else
-        ! !write(6,*) 'ileftbisect +', ileftbisect
-        ! call stdmove1rangefastv6(0,0)
-        ! call bisectv6r
-        ! !write(6,*) 'bisectv6l called =', ileftbisect 
-        ! call bisectv6l 
-        !endif  
-    !        
+        ! old lr bisection        
+            !if (ileftbisect.le.(nchorizo-nbisecthalf)) then    
+            ! !write(6,*) 'ileftbisect -', ileftbisect    
+            ! call stdmove1rangefastv6(nchorizo,nchorizo)  
+            ! !write(6,*) 'bisectv6r called =', ileftbisect
+            ! call bisectv6r
+            ! call bisectv6l      
+            !else
+            ! !write(6,*) 'ileftbisect +', ileftbisect
+            ! call stdmove1rangefastv6(0,0)
+            ! call bisectv6r
+            ! !write(6,*) 'bisectv6l called =', ileftbisect 
+            ! call bisectv6l 
+            !endif  
+        !        
       
       
-        !else   
+            !else   
 
-    ! move 1 by 1   
-	    ! if (ileftbisect.lt.nchorizo) then ! nbisect should be >= 2.
-	    !n1=nchorizo-ileftbisect
-	    !n2=nbisect-1-n1 
-    !      !write (12,*) 'n1, n2=', n1,n2
-    !      !write (6,*) 'n1, n2=', n1,n2
-    !      !call stdmove1rangefastv6(ileftbisect+1,nchorizo)	
-    !      call stdmove1fastv6(ileftbisect+1,nchorizo)     
-	    !if (n2.gt.0) then    
-	    !!call stdmove1rangefastv6(0,n2-1)
-    !      call stdmove1fastv6(0,n2-1)
-    !      endif
-    !    else ! ileftbisect.eq.nchorizo	 
-    !      !call stdmove1rangefastv6(0,nbisect-2)	
-    !      call stdmove1fastv6(0,nbisect-2)
-    !    endif	         
-    !     
-        !endif 
-    !------------------------------------------------   
-    endif
+        ! move 1 by 1   
+	        ! if (ileftbisect.lt.nchorizo) then ! nbisect should be >= 2.
+	        !n1=nchorizo-ileftbisect
+	        !n2=nbisect-1-n1 
+        !      !write (12,*) 'n1, n2=', n1,n2
+        !      !write (6,*) 'n1, n2=', n1,n2
+        !      !call stdmove1rangefastv6(ileftbisect+1,nchorizo)	
+        !      call stdmove1fastv6(ileftbisect+1,nchorizo)     
+	        !if (n2.gt.0) then    
+	        !!call stdmove1rangefastv6(0,n2-1)
+        !      call stdmove1fastv6(0,n2-1)
+        !      endif
+        !    else ! ileftbisect.eq.nchorizo	 
+        !      !call stdmove1rangefastv6(0,nbisect-2)	
+        !      call stdmove1fastv6(0,nbisect-2)
+        !    endif	         
+        !     
+            !endif 
+        !------------------------------------------------   
+        endif
     
     else
 	    stop 'nbisect >= nchorizo, stop!'
@@ -1208,20 +1233,16 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2,nextra &
+					    ,k,bilvl &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
+    real(kind=r8) :: x(3,npart),xnew(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-   	                    ,cwtbegintmp1(0:nspin-1,nisospin),cwtendtmp1(0:nspin-1,nisospin) &
-                        ,cwtbegintmp2(0:nspin-1,nisospin),cwtendtmp2(0:nspin-1,nisospin)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisect),cwtr2ltmp1(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:nbisect),cwtr2ltmp2(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
     logical :: reject	
  
     ibisecttot=ibisecttot+1  
@@ -1240,15 +1261,15 @@ contains
     !xoldtmp(i,:,:)=oldristra(i)%x
     !enddo
      
-    cwtbegintmp(:,:)=cwtl2r(ileftbisect,:,:)
-    cwtendtmp(:,:)=cwtr2l(ileftbisect+nbisect,:,:)  
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisect)  
    
     ! tmp1 deal with oldlv
-    cwtl2rtmp1(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtr2ltmp1(0:nbisect,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisect,:,:)
+    cwtl2rtmp1(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtr2ltmp1(:,:,0:nbisect)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisect)
     ! tmp2 deal with newlv   
-    cwtl2rtmp2(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtr2ltmp2(0:nbisect,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisect,:,:)
+    cwtl2rtmp2(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtr2ltmp2(:,:,0:nbisect)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisect)
    
     oldlv=1.
     newlv=1.   
@@ -1262,7 +1283,7 @@ contains
         
     do bilvl=1,mmax  ! besection.  level 1 to N. mmax = the total level N.	 
         ! move the current level   
-        sigmamid=sqrt(hbar*tau*2.0_r8**(-bilvl))  
+        sigmamid=sqrt(hbar*tau/2**bilvl)  
 	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
 	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
 		    imid=2**(mmax-bilvl)+i*2**(mmax-bilvl+1)
@@ -1286,12 +1307,12 @@ contains
 		    jp=(l-1)*jd
 		    !xold=oldristra(j)%x
             xnew=newristra(j)%x
-		    ! call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
+		    ! call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
         enddo
 	    jmax=lmax*jd
-	    newlv(mmax)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp(:,:)) )) 	
-	    oldlv(mmax)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp(:,:)) ))	   
+	    newlv(mmax)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 	
+	    oldlv(mmax)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	   
 	    tmp=log(newlv(mmax))-log(oldlv(mmax)) 
   	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
 	    rn=randn(1)	   
@@ -1325,24 +1346,24 @@ contains
     ! update cwtl2r, cwtr2l.	 
     ! update cwtl2r for all beads. this can be optimized in the future.
      
-	    cwtl2r(ileftbisect+1:ileftbisect+nbisect-1,:,:)=cwtl2rtmp2(1:jmax,:,:) ! here jmax should already be 2**mmax-1 
+	    cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisect-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1 
 	    if ((ileftbisect+nbisect).le.nchorizo-1) then
         do k=ileftbisect+nbisect,nchorizo-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
         enddo
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
         else
         !ileftbisect+nbisect=nchorizo  
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))   
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
         endif
    
     ! update cwtr2l for all the beads
 	    do k=ileftbisect+nbisect-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
 
     endif  
 
@@ -1350,7 +1371,145 @@ contains
     
     return  
     end subroutine bisectv6b            
+  
+    subroutine bisectv6bflex(ileftbisect,mmaxnow) 
+    ! based on v6a version. move beads first, then do an overall judge.
+    use wavefunction
+    use estimator
+    use random
+    use v6stepcalc
+    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
+					    ,k,bilvl &
+	                    ,dtexpt,mmaxnow,nbisectnow
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart)
+    real(kind=r8) :: tmp 
+    complex(kind=r8) :: oldlv(0:mmaxnow),newlv(0:mmaxnow)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:2**mmaxnow),cwtr2ltmp1(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:2**mmaxnow),cwtr2ltmp2(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
+    logical :: reject	
+ 
+    ibisecttot=ibisecttot+1  
    
+    nbisectnow=2**mmaxnow
+    oldristra(0:nbisectnow)=ristra(ileftbisect:ileftbisect+nbisectnow)
+   
+    newristra(0)=oldristra(0)
+    newristra(nbisectnow)=oldristra(nbisectnow)
+
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisectnow)  
+   
+    ! tmp1 deal with oldlv
+    cwtl2rtmp1(:,:,0:nbisectnow)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow)
+    cwtr2ltmp1(:,:,0:nbisectnow)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisectnow)
+    ! tmp2 deal with newlv   
+    cwtl2rtmp2(:,:,0:nbisectnow)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow)
+    cwtr2ltmp2(:,:,0:nbisectnow)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisectnow)
+   
+    oldlv=1.
+    newlv=1.   
+    
+    tau=dt*nbisectnow ! total time for the bisection slice.
+
+    ! up to here, newristra has been loaded.
+   
+    ! judge if we accept the newristra or not.
+    ! in this v6 case, v is not justpotential v, it should be the value of < ... >. lv.
+        
+    do bilvl=1,mmaxnow  ! besection.  level 1 to N. mmaxnow = the total level N.	 
+        ! move the current level   
+        sigmamid=sqrt(hbar*tau/2**bilvl)  
+	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
+	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
+		    imid=2**(mmaxnow-bilvl)+i*2**(mmaxnow-bilvl+1)
+		    il=imid-2**(mmaxnow-bilvl)
+		    ir=imid+2**(mmaxnow-bilvl)
+		    gauss=sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+		    xmid=(newristra(il)%x+newristra(ir)%x)/2
+		    newristra(imid)%x=xmid+gauss  
+            !write(12,*) 'bilvl il ir imid sigmamid =',bilvl, il,ir,imid,sigmamid
+            !write(12,*) 'gauss =', gauss
+        enddo         
+    enddo
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!    
+    ! then judge the last level
+	    bisecttot(mmaxnow)=bisecttot(mmaxnow)+1	   
+	    lmax=2**mmaxnow-1 
+	    jd=1 ! interval
+	    dtexpt=-1 ! for the R L part, that's why the extra -1. dt=2**dtexp
+	    do l=1,lmax
+		    j=l*jd
+		    jp=(l-1)*jd
+		    !xold=oldristra(j)%x
+            xnew=newristra(j)%x
+		    ! call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
+        enddo
+	    jmax=lmax*jd
+	    newlv(mmaxnow)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 	
+	    oldlv(mmaxnow)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	   
+	    tmp=log(newlv(mmaxnow))-log(oldlv(mmaxnow)) 
+  	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
+	    rn=randn(1)	   
+    ! can check if l2r and r2l give	the same lv.		    
+            !write(12,*) 'tmp ln rn=',tmp,log(rn(1))
+	    if (log(rn(1)).lt.tmp) then
+	        reject=.false. 
+	        bisectcount(mmaxnow)=bisectcount(mmaxnow)+1	 
+	    else
+	        reject=.true. 
+            !write(6,*) 'rn=',rn(1),log(rn(1))
+            !write(6,*) 'tmp=',tmp,newlv(mmaxnow),oldlv(mmaxnow),log(newlv(mmaxnow)),log(oldlv(mmaxnow)) 	
+            
+        endif 
+		    !write(6,*) 'imid=',imid	
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!        
+        
+    if (reject) then
+	    call addval(2,0.0_r8,1.0_r8)
+    else
+	    ibisect=ibisect+1 
+	    call addval(2,1.0_r8,1.0_r8)  
+ 
+	    !do i=0,nbisectnow
+    !       ristra(ileftbisect+i)=newristra(i)
+    !   enddo	 
+        ristra(ileftbisect:ileftbisect+nbisectnow)=newristra(0:nbisectnow) ! this look like a bad way (pointer issue I think), do loop is good. 04/10/2019£¬ remove pointer, problem fixed I tihnk.	 
+
+        xl=ristra(0)%x     
+	    xr=ristra(nchorizo)%x     
+    ! update cwtl2r, cwtr2l.	 
+    ! update cwtl2r for all beads. this can be optimized in the future.
+     
+	    cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmaxnow-1 
+	    if ((ileftbisect+nbisectnow).le.nchorizo-1) then
+        do k=ileftbisect+nbisectnow,nchorizo-1
+	    x=ristra(k)%x
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
+        enddo
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
+        else
+        !ileftbisect+nbisectnow=nchorizo  
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
+        endif
+   
+    ! update cwtr2l for all the beads
+	    do k=ileftbisect+nbisectnow-1,1,-1
+	    x=ristra(k)%x
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
+	    enddo
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
+
+    endif  
+
+    rejectbisectv6improve=reject
+    
+    return  
+    end subroutine bisectv6bflex           
+    
     subroutine bisectv6lb 
     ! b version, move the whole nbiect beads instead of bisecthalf.
     ! should be better than bisectv6l,rhalf     
@@ -1361,21 +1520,18 @@ contains
     use v6stepcalc
     use brut
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt &
                         ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),x0new(3,npart),xold(3,npart) &
-                    ,x0old(3,npart),xendold(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: x(3,npart),xnew(3,npart),x0new(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:nbisect) &
 	                    ,cwtendtmp(0:nspin-1,nisospin) &
-                        ,cwtbegintmp1(0:nspin-1,nisospin),cwtbegintmp2(0:nspin-1,nisospin) &
-                        ,cwtendtmpnow(0:nspin-1,nisospin)             
+                        ,cwtbegintmp2(0:nspin-1,nisospin)        
     logical :: reject	
 
     ibisecttotl=ibisecttotl+1  
@@ -1397,7 +1553,7 @@ contains
     ! deal with the two ends first, then do the classic bisection.   
    
     newristra(nbisectnow)=oldristra(nbisectnow)   
-    cwtendtmp(:,:)=cwtr2l(ileftbisect+nbisectnow,:,:)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisectnow)
  
     newristra(0)%x=oldristra(nbisectnow)%x+sigmamid*reshape(gaussian(3*npart),(/3,npart/))
    
@@ -1410,8 +1566,8 @@ contains
     oldlv(0)=1.
     newlv(0)=1. ! it seems this does not need to be set to 1. check this.
 
-    cwtl2rtmp1(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    call v6propr(x0new,-1,cwtbegintmp2,cwtl2rtmp2(0,:,:)) 
+    cwtl2rtmp1(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    call v6propr(x0new,-1,cwtbegintmp2,cwtl2rtmp2(:,:,0)) 
    
     ! prepare the further new bisection positions
     do bilvl=1,mmaxnow   ! level 1 to N. mmax = the total level N.
@@ -1438,8 +1594,8 @@ contains
 		    jp=(l-1)*jd
 		    !xold=oldristra(j)%x
             xnew=newristra(j)%x
-		    !call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
+		    !call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
 		    !if ( sum((xnew-xold)**2).eq.0) then
 			    !write(6,*) 'bilvl=',bilvl	
 			    !write(6,*) 'l=',l,j,jp
@@ -1448,8 +1604,8 @@ contains
 		    !endif   
 	    enddo
 	    jmax=lmax*jd  
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp(:,:)) ))	
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp(:,:)) )) 
+	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	
+	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 
 	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))
   	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
 	    rn=randn(1)	   
@@ -1475,29 +1631,160 @@ contains
 	    xr=ristra(nchorizo)%x 
     ! update cwtl2r, cwtr2l.	 
         cwtbegin=cwtbegintmp2
-	    cwtl2r(ileftbisect:ileftbisect+nbisectnow-1,:,:)=cwtl2rtmp2(0:jmax,:,:) ! here jmax should already be 2**mmax-1    
+	    cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,0:jmax) ! here jmax should already be 2**mmax-1    
 	    if ((ileftbisect+nbisectnow).le.nchorizo-1) then
         do k=ileftbisect+nbisectnow,nchorizo-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
         enddo
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
         else
         !ileftbisect+nbisect=nchorizo  
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))   
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
         endif       
     ! update cwtr2l for all the beads
 	    do k=ileftbisect+nbisectnow-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	   
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	   
     endif    
   
     return  
     end subroutine bisectv6lb  
    
+    subroutine bisectv6lbflex(mmaxnow)
+    ! b version, move the whole nbiect beads instead of bisecthalf.
+    ! should be better than bisectv6l,rhalf     
+    ! move the left end, 0th bead,ileftbiect=0; if ileftbisect /= 0 then the small modification on 0th level is needed.
+    use wavefunction
+    use estimator
+    use random
+    use v6stepcalc
+    use brut
+    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
+					    ,irightbisect,k,bilvl &
+	                    ,dtexpt &
+                        ,nbisectnow,mmaxnow
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),x0new(3,npart)
+    real(kind=r8) :: tmp 
+    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtendtmp(0:nspin-1,nisospin) &
+                        ,cwtbegintmp2(0:nspin-1,nisospin)        
+    logical :: reject	
+
+    ibisecttotl=ibisecttotl+1  
+    
+    nbisectnow=2**mmaxnow
+    ileftbisect=0
+    irightbisect=ileftbisect+nbisectnow
+
+    tau=dt*nbisectnow ! total time for the bisection slice. nisectnow is usually nbisecthalf
+    sigmamid=sqrt(2*hbar*tau)  
+
+    oldristra(0:nbisectnow)=ristra(ileftbisect:ileftbisect+nbisectnow)
+ 
+    ! deal with the two ends first, then do the classic bisection.   
    
+    newristra(nbisectnow)=oldristra(nbisectnow)   
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisectnow)
+ 
+    newristra(0)%x=oldristra(nbisectnow)%x+sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+   
+    x0new=newristra(0)%x
+   
+    ! i,jpro,i,jplo, the o means old are actually the current order.
+   
+    call corop(x0new,iplo,jplo,cwtbegintmp2)     
+   
+    oldlv(0)=1.
+    newlv(0)=1. ! dummy
+
+    cwtl2rtmp1(:,:,0:nbisectnow)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow)
+    call v6propr(x0new,-1,cwtbegintmp2,cwtl2rtmp2(:,:,0)) 
+   
+    ! prepare the further new bisection positions
+    do bilvl=1,mmaxnow   ! level 1 to N. mmax = the total level N.
+	    sigmamid=sqrt(hbar*tau/2**bilvl)  
+	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
+	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
+		    imid=2**(mmaxnow-bilvl)+i*2**(mmaxnow-bilvl+1)
+		    il=imid-2**(mmaxnow-bilvl)
+		    ir=imid+2**(mmaxnow-bilvl)
+		    !write(6,*) 'bilvl il ir imid sigmamid=',bilvl, il,ir,imid,sigmamid
+		    gauss=sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+		    xmid=(newristra(il)%x+newristra(ir)%x)/2.
+		    newristra(imid)%x=xmid+gauss
+	    enddo 
+    enddo 
+
+    bilvl=mmaxnow  ! besection.  level 1 to N. mmax = the total level N.	   
+	bisecttotl(bilvl)=bisecttotl(bilvl)+1.	   
+	lmax=2**bilvl-1 
+	jd=2**(mmaxnow-bilvl) ! interval
+	dtexpt=mmaxnow-bilvl-1 ! for the R L part, that's why the extra -1. dt=2**dtexp 
+	do l=1,lmax
+		j=l*jd
+		jp=(l-1)*jd
+		!xold=oldristra(j)%x
+        xnew=newristra(j)%x
+		!call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
+		!if ( sum((xnew-xold)**2).eq.0) then
+			!write(6,*) 'bilvl=',bilvl	
+			!write(6,*) 'l=',l,j,jp
+			!write(6,*) 'sigmamid=',sigmamid
+		!   write(6,*) 'xnew-xold=',xnew-xold
+		!endif   
+	enddo
+	jmax=lmax*jd  
+	oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	
+	newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 
+	tmp=log(newlv(bilvl))-log(oldlv(bilvl))
+  	!tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
+	rn=randn(1)	   
+! can check if l2r and r2l give	the same lv.		    
+	    !write(6,*) 'tmp ln rn=',tmp,log(rn(1))
+	if (log(rn(1)).lt.tmp) then
+	    reject=.false. 
+        bisectcountl(bilvl)=bisectcountl(bilvl)
+        call addval(10,1.0_r8,1.0_r8)  
+	    ibisectl=ibisectl+1 
+        ristra(ileftbisect:ileftbisect+nbisectnow)=newristra(0:nbisectnow)
+    !ristra(ileftbisect:ileftbisect+nbisect)=newristra(0:nbisect) ! this look like a bad way (pointer issue I think), do loop is good.	 
+        xl=ristra(0)%x     
+	    xr=ristra(nchorizo)%x 
+    ! update cwtl2r, cwtr2l.	 
+        cwtbegin=cwtbegintmp2
+	    cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,0:jmax) ! here jmax should already be 2**mmax-1    
+	    if ((ileftbisect+nbisectnow).le.nchorizo-1) then
+        do k=ileftbisect+nbisectnow,nchorizo-1
+	    x=ristra(k)%x
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
+        enddo
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
+        else
+        !ileftbisect+nbisect=nchorizo  
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
+        endif       
+    ! update cwtr2l for all the beads
+	    do k=ileftbisect+nbisectnow-1,1,-1
+	    x=ristra(k)%x
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
+	    enddo
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  
+	else
+	    reject=.true.  
+        call addval(10,0.0_r8,1.0_r8)   
+	endif   
+
+    return  
+    end subroutine bisectv6lbflex  
+    
     subroutine bisectv6rb ! move the right end. irightbisect=nchorizo
     ! move beads, then do an overall judge.
     use wavefunction
@@ -1506,20 +1793,17 @@ contains
     use v6stepcalc
     use brut
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt &
                         ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart) &
-                    ,x0old(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart) 
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-                        ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	              
-                      
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisect),cwtl2rtmp2(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin) &
+                        ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	                               
     logical :: reject	
    
     ibisecttotr=ibisecttotr+1    
@@ -1534,13 +1818,13 @@ contains
     mmaxnow=mmax  
   
     tau=dt*nbisectnow ! total time for the bisection slice.
-    sigmamid=sqrt(2.*hbar*tau)  
+    sigmamid=sqrt(2*hbar*tau)  
    
     oldristra(0:nbisectnow)=ristra(ileftbisect:ileftbisect+nbisectnow)
  
     ! deal with the two ends first, then do the classic bisection.   
     newristra(0)=oldristra(0) 
-    cwtbegintmp(:,:)=cwtl2r(ileftbisect,:,:)
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
    
     newristra(nbisectnow)%x=oldristra(0)%x+sigmamid*reshape(gaussian(3*npart),(/3,npart/))
    
@@ -1549,16 +1833,17 @@ contains
    
     call corop(xnew,ipro,jpro,cwtendnew)     
 
-    oldlv(0)=1.
-    newlv(0)=1. ! why 1. check again.
+    oldlv(0)=1
+    newlv(0)=1 ! dummy, no use.
    
-    cwtl2rtmp1(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtl2rtmp2(0,:,:)=cwtl2rtmp1(0,:,:)
-    call v6propr(oldristra(nbisectnow)%x,-1,cwtend,cwtendtmp1now)  
+    cwtl2rtmp1(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtl2rtmp2(:,:,0)=cwtl2rtmp1(:,:,0)
+    cwtendtmp1now=cwtr2l(:,:,nchorizo)
+    !call v6propr(oldristra(nbisectnow)%x,-1,cwtend,cwtendtmp1now)  
     call v6propr(newristra(nbisectnow)%x,-1,cwtendnew,cwtendtmp2now)    
      
     do bilvl=1,mmaxnow   ! level 1 to N. mmax = the total level N.
-	    sigmamid=sqrt(hbar*tau*2.0_r8**(-bilvl))  
+	    sigmamid=sqrt(hbar*tau/2**bilvl)  
 	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
 	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
 		    imid=2**(mmaxnow-bilvl)+i*2**(mmaxnow-bilvl+1)
@@ -1566,77 +1851,198 @@ contains
 		    ir=imid+2**(mmaxnow-bilvl)
 		    !write(6,*) 'bilvl il ir imid sigmamid=',bilvl, il,ir,imid,sigmamid
 		    gauss=sigmamid*reshape(gaussian(3*npart),(/3,npart/))
-		    xmid=(newristra(il)%x+newristra(ir)%x)/2.
+		    xmid=(newristra(il)%x+newristra(ir)%x)/2
 		    newristra(imid)%x=xmid+gauss
 	    enddo 
     enddo     
     ! judge
-        bilvl=mmaxnow  ! besection.  level 1 to N. mmax = the total level N.	   
-	    bisecttotr(bilvl)=bisecttotr(bilvl)+1.	   
-	    lmax=2**bilvl-1 
-	    jd=2**(mmaxnow-bilvl) ! interval
-	    dtexpt=mmaxnow-bilvl-1 ! for the R L part, that's why the extra -1. dt=2**dtexp         
-	    do l=1,lmax
-		    j=l*jd
-		    jp=(l-1)*jd
-		    !xold=oldristra(j)%x
-            xnew=newristra(j)%x
-		    !call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
-		    !if ( sum((xnew-xold)**2).eq.0) then
-			    !write(6,*) 'bilvl=',bilvl	
-			    !write(6,*) 'l=',l,j,jp
-			    !write(6,*) 'sigmamid=',sigmamid
-		    !   write(6,*) 'xnew-xold=',xnew-xold
-		    !endif   
-	    enddo
-	    jmax=lmax*jd  
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp1now(:,:)) ))	
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp2now(:,:)) )) 
-	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))
-  	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
-	    rn=randn(1)	   
-    ! can check if l2r and r2l give	the same lv.		    
-	        !write(6,*) 'tmp ln rn=',tmp,log(rn(1))
-	    if (log(rn(1)).lt.tmp) then
-	        reject=.false. 
-            bisectcountr(bilvl)=bisectcountr(bilvl)+1.
-	    else
-	        reject=.true.  
-	    endif 
+    bilvl=mmaxnow  ! besection.  level 1 to N. mmax = the total level N.	   
+	bisecttotr(bilvl)=bisecttotr(bilvl)+1   
+	lmax=2**bilvl-1 
+	jd=2**(mmaxnow-bilvl) ! interval
+	dtexpt=mmaxnow-bilvl-1 ! for the R L part, that's why the extra -1. dt=2**dtexp         
+	do l=1,lmax
+		j=l*jd
+		jp=(l-1)*jd
+		!xold=oldristra(j)%x
+        xnew=newristra(j)%x
+		!call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
+		!if ( sum((xnew-xold)**2).eq.0) then
+			!write(6,*) 'bilvl=',bilvl	
+			!write(6,*) 'l=',l,j,jp
+			!write(6,*) 'sigmamid=',sigmamid
+		!   write(6,*) 'xnew-xold=',xnew-xold
+		!endif   
+	enddo
+	jmax=lmax*jd  
+    write(6,*) 'jmax=',jmax
+	oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp1now(:,:)) ))	
+	newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp2now(:,:)) )) 
+	tmp=log(newlv(bilvl))-log(oldlv(bilvl))
+  	!tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
+	rn=randn(1)	   
+! can check if l2r and r2l give	the same lv.		    
+	    !write(6,*) 'tmp ln rn=',tmp,log(rn(1))
+	if (log(rn(1)).lt.tmp) then
+	    reject=.false. 
+        bisectcountr(bilvl)=bisectcountr(bilvl)+1.
+	else
+	    reject=.true.  
+	endif 
    
     if (reject) then
         call addval(11,0.0_r8,1.0_r8)  
     else
         call addval(11,1.0_r8,1.0_r8)  
 	    ibisectr=ibisectr+1 
- 
         ristra(ileftbisect:ileftbisect+nbisectnow)=newristra(0:nbisectnow)     
-    !ristra(ileftbisect:ileftbisect+nbisect)=newristra(0:nbisect) ! this look like a bad way (pointer issue I think), do loop is good.	 
 	 	 
     ! update cwtl2r, cwtr2l.	 
     ! update cwtl2r for all beads. this can be optimized in the future.
-        cwtl2r(ileftbisect+1:ileftbisect+nbisectnow-1,:,:)=cwtl2rtmp2(1:jmax,:,:) ! here jmax should already be 2**mmax-1  
+        cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1  
   
-        call v6propl(ristra(nchorizo)%x,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:)) ! ileftbisect+nbisectnow=nchorizo  
+        call v6propl(ristra(nchorizo)%x,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo)) ! ileftbisect+nbisectnow=nchorizo  
 
-     
         ! update cwtr2l for all the beads
         cwtend=cwtendnew         
-        cwtr2l(nchorizo,:,:)=cwtendtmp2now
+        cwtr2l(:,:,nchorizo)=cwtendtmp2now
 	    do k=nchorizo-1,1,-1
-        x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+            x=ristra(k)%x
+	        call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
         xl=ristra(0)%x
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
 
     endif    
                      
     return  
     end subroutine bisectv6rb      
    
+    subroutine bisectv6rbflex(mmaxnow) ! mmaxnow <= mmax
+    use wavefunction
+    use estimator
+    use random
+    use v6stepcalc
+    use brut
+    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
+					    ,irightbisect,k,bilvl &
+	                    ,dtexpt &
+                        ,nbisectnow,mmaxnow
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart) 
+    real(kind=r8) :: tmp 
+    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:2**mmaxnow),cwtl2rtmp2(0:nspin-1,nisospin,0:2**mmaxnow) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin) &
+                        ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	                               
+    logical :: reject	
    
+    ibisecttotr=ibisecttotr+1    
+   
+    nbisectnow=2**mmaxnow
+    ileftbisect=nchorizo-nbisectnow
+    irightbisect=nchorizo
+  
+  
+    tau=dt*nbisectnow ! total time for the bisection slice.
+    sigmamid=sqrt(2*hbar*tau)  
+   
+    oldristra(0:nbisectnow)=ristra(ileftbisect:ileftbisect+nbisectnow)
+ 
+    ! deal with the two ends first, then do the classic bisection.   
+    newristra(0)=oldristra(0) 
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+   
+    newristra(nbisectnow)%x=oldristra(0)%x+sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+   
+    xold=oldristra(nbisectnow)%x
+    xnew=newristra(nbisectnow)%x   
+   
+    call corop(xnew,ipro,jpro,cwtendnew)     
+
+    oldlv(0)=1
+    newlv(0)=1 ! dummy, no use.
+   
+    cwtl2rtmp1(:,:,0:nbisectnow)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow)
+    cwtl2rtmp2(:,:,0)=cwtl2rtmp1(:,:,0)
+    cwtendtmp1now=cwtr2l(:,:,nchorizo)
+    !call v6propr(oldristra(nbisectnow)%x,-1,cwtend,cwtendtmp1now)  
+    call v6propr(newristra(nbisectnow)%x,-1,cwtendnew,cwtendtmp2now)    
+     
+    do bilvl=1,mmaxnow   ! level 1 to N. mmax = the total level N.
+	    sigmamid=sqrt(hbar*tau/2**bilvl)  
+	    !write(6,*) 'bilvl sigmamid=',bilvl,sigmamid
+	    do i=0,2**(bilvl-1)-1 ! store all the possible trial config in new ristra%x
+		    imid=2**(mmaxnow-bilvl)+i*2**(mmaxnow-bilvl+1)
+		    il=imid-2**(mmaxnow-bilvl)
+		    ir=imid+2**(mmaxnow-bilvl)
+		    !write(6,*) 'bilvl il ir imid sigmamid=',bilvl, il,ir,imid,sigmamid
+		    gauss=sigmamid*reshape(gaussian(3*npart),(/3,npart/))
+		    xmid=(newristra(il)%x+newristra(ir)%x)/2
+		    newristra(imid)%x=xmid+gauss
+	    enddo 
+    enddo     
+    ! judge
+    bilvl=mmaxnow  ! besection.  level 1 to N. mmax = the total level N.	   
+	bisecttotr(bilvl)=bisecttotr(bilvl)+1   
+	lmax=2**bilvl-1 
+	jd=2**(mmaxnow-bilvl) ! interval
+	dtexpt=mmaxnow-bilvl-1 ! for the R L part, that's why the extra -1. dt=2**dtexp         
+	do l=1,lmax
+		j=l*jd
+		jp=(l-1)*jd
+		!xold=oldristra(j)%x
+        xnew=newristra(j)%x
+		!call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
+		!if ( sum((xnew-xold)**2).eq.0) then
+			!write(6,*) 'bilvl=',bilvl	
+			!write(6,*) 'l=',l,j,jp
+			!write(6,*) 'sigmamid=',sigmamid
+		!   write(6,*) 'xnew-xold=',xnew-xold
+		!endif   
+	enddo
+	jmax=lmax*jd    
+	oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp1now(:,:)) ))	
+	newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp2now(:,:)) )) 
+	tmp=log(newlv(bilvl))-log(oldlv(bilvl))
+  	!tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
+	rn=randn(1)	   
+! can check if l2r and r2l give	the same lv.		    
+	    !write(6,*) 'tmp ln rn=',tmp,log(rn(1))
+	if (log(rn(1)).lt.tmp) then
+	    reject=.false. 
+        bisectcountr(bilvl)=bisectcountr(bilvl)+1
+        call addval(11,1.0_r8,1.0_r8)  
+	    ibisectr=ibisectr+1 
+        ristra(ileftbisect:ileftbisect+nbisectnow)=newristra(0:nbisectnow)      	 
+    ! update cwtl2r, cwtr2l.	 
+    ! update cwtl2r for all beads. this can be optimized in the future.
+        cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1  
+        call v6propl(ristra(nchorizo)%x,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo)) ! ileftbisect+nbisectnow=nchorizo  
+        ! update cwtr2l for all the beads
+        cwtend=cwtendnew         
+        cwtr2l(:,:,nchorizo)=cwtendtmp2now
+	    do k=nchorizo-1,1,-1
+            x=ristra(k)%x
+	        call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
+	    enddo
+        xl=ristra(0)%x
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	                
+	else
+	    reject=.true.  
+        call addval(11,0.0_r8,1.0_r8)      
+	endif    
+    return  
+    end subroutine bisectv6rbflex     
+   
+    
+    
+    
+    
+    
     subroutine bisectv6a(ileftbisect) 
     ! slighly faster than the bisectv6improve verison. only move the beads at the currently level then judge.
     use wavefunction
@@ -1644,20 +2050,16 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2,nextra &
+					    ,k,bilvl &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-   	                    ,cwtbegintmp1(0:nspin-1,nisospin),cwtendtmp1(0:nspin-1,nisospin) &
-                        ,cwtbegintmp2(0:nspin-1,nisospin),cwtendtmp2(0:nspin-1,nisospin)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisect),cwtr2ltmp1(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:nbisect),cwtr2ltmp2(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) 
     logical :: reject	
  
     ibisecttot=ibisecttot+1  
@@ -1676,15 +2078,15 @@ contains
     !xoldtmp(i,:,:)=oldristra(i)%x
     !enddo
      
-    cwtbegintmp(:,:)=cwtl2r(ileftbisect,:,:)
-    cwtendtmp(:,:)=cwtr2l(ileftbisect+nbisect,:,:)  
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisect)  
    
     ! tmp1 deal with oldlv
-    cwtl2rtmp1(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtr2ltmp1(0:nbisect,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisect,:,:)
+    cwtl2rtmp1(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtr2ltmp1(:,:,0:nbisect)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisect)
     ! tmp2 deal with newlv   
-    cwtl2rtmp2(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtr2ltmp2(0:nbisect,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisect,:,:)
+    cwtl2rtmp2(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtr2ltmp2(:,:,0:nbisect)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisect)
    
     oldlv=1.
     newlv=1.   
@@ -1721,14 +2123,14 @@ contains
 		    jp=(l-1)*jd
 		    xold=oldristra(j)%x
             xnew=newristra(j)%x
-		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
+		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
     ! in the last bisection level, no need to calculate this because it old is already there. check.		   
-            call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
+            call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
 
 	    enddo
 	    jmax=lmax*jd
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp(:,:)) )) 	   
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp(:,:)) ))
+	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 	   
+	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))
     
 	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))+log(oldlv(bilvl-1))-log(newlv(bilvl-1))   
   	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
@@ -1760,24 +2162,24 @@ contains
     ! update cwtl2r, cwtr2l.	 
     ! update cwtl2r for all beads. this can be optimized in the future.
      
-	    cwtl2r(ileftbisect+1:ileftbisect+nbisect-1,:,:)=cwtl2rtmp2(1:jmax,:,:) ! here jmax should already be 2**mmax-1 
+	    cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisect-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1 
 	    if ((ileftbisect+nbisect).le.nchorizo-1) then
         do k=ileftbisect+nbisect,nchorizo-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
         enddo
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
         else
         !ileftbisect+nbisect=nchorizo  
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))   
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
         endif
    
     ! update cwtr2l for all the beads
 	    do k=ileftbisect+nbisect-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
   
      
     endif  
@@ -1793,19 +2195,16 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2,nextra &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-   	                    ,cwtbegintmp1(0:nspin-1,nisospin),cwtendtmp1(0:nspin-1,nisospin) &
-                        ,cwtbegintmp2(0:nspin-1,nisospin),cwtendtmp2(0:nspin-1,nisospin)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisect),cwtr2ltmp1(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:nbisect),cwtr2ltmp2(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
     logical :: reject	
       
     irightbisect=ileftbisect+nbisect
@@ -1823,15 +2222,15 @@ contains
     !xoldtmp(i,:,:)=oldristra(i)%x
     !enddo
      
-    cwtbegintmp(:,:)=cwtl2r(ileftbisect,:,:)
-    cwtendtmp(:,:)=cwtr2l(ileftbisect+nbisect,:,:)  
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisect)  
    
     ! tmp1 deal with oldlv
-    cwtl2rtmp1(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtr2ltmp1(0:nbisect,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisect,:,:)
+    cwtl2rtmp1(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtr2ltmp1(:,:,0:nbisect)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisect)
     ! tmp2 deal with newlv   
-    cwtl2rtmp2(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtr2ltmp2(0:nbisect,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisect,:,:)
+    cwtl2rtmp2(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtr2ltmp2(:,:,0:nbisect)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisect)
    
     oldlv=1.
     newlv=1.   
@@ -1893,8 +2292,8 @@ contains
 		    jp=(l-1)*jd
 		    xold=oldristra(j)%x
             xnew=newristra(j)%x
-		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
+		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
 		    !if ( sum((xnew-xold)**2).eq.0) then
 			    !write(6,*) 'bilvl=',bilvl	
 			    !write(6,*) 'l=',l,j,jp
@@ -1903,8 +2302,8 @@ contains
 		    !endif   
 	    enddo
 	    jmax=lmax*jd
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp(:,:)) )) 	   
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp(:,:)) ))	   
+	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 	   
+	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	   
 	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))+log(oldlv(bilvl-1))-log(newlv(bilvl-1))   
   	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
 	    rn=randn(1)	   
@@ -1932,10 +2331,10 @@ contains
 	    !        write(6,*) 'tmp ln(rn)=',tmp,log(rn(1))		   
 		    !     write (6,*) 'lv=',oldlv(bilvl),newlv(bilvl),oldlv(bilvl-1),newlv(bilvl-1)
 		    !  write(6,*) 'cwtbegintmp+*cwtendtmp=',sum(conjg(cwtbegintmp(:,:))*cwtendtmp(:,:))
-		    !  !write(6,*) 'cwtl2rtmp1=',cwtl2rtmp1(jmax,:,:),jmax
+		    !  !write(6,*) 'cwtl2rtmp1=',cwtl2rtmp1(:,:,jmax),jmax
 		    !  !write(6,*) 'xold=',xold	
     !           !write(6,*) 'xnew=',xnew	
-		    !  !write(6,*) 'cwtl2rtmp2=',cwtl2rtmp2(jmax,:,:)	
+		    !  !write(6,*) 'cwtl2rtmp2=',cwtl2rtmp2(:,:,jmax)	
 		    !  !write(6,*) 'cwtendtmp=',cwtendtmp
 		    !
 		    !     !stop
@@ -1964,24 +2363,24 @@ contains
     ! update cwtl2r, cwtr2l.	 
     ! update cwtl2r for all beads. this can be optimized in the future.
      
-	    cwtl2r(ileftbisect+1:ileftbisect+nbisect-1,:,:)=cwtl2rtmp2(1:jmax,:,:) ! here jmax should already be 2**mmax-1 
+	    cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisect-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1 
 	    if ((ileftbisect+nbisect).le.nchorizo-1) then
         do k=ileftbisect+nbisect,nchorizo-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
         enddo
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
         else
         !ileftbisect+nbisect=nchorizo  
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))   
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
         endif
    
     ! update cwtr2l for all the beads
 	    do k=ileftbisect+nbisect-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
       
     endif     
    
@@ -1995,19 +2394,16 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2,nextra &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisecthalf,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmaxhalf),newlv(0:mmaxhalf)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisecthalf,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisecthalf,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisecthalf,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisecthalf,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
-   	                    ,cwtbegintmp1(0:nspin-1,nisospin),cwtendtmp1(0:nspin-1,nisospin) &
-                        ,cwtbegintmp2(0:nspin-1,nisospin),cwtendtmp2(0:nspin-1,nisospin)
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisecthalf),cwtr2ltmp1(0:nspin-1,nisospin,0:nbisecthalf) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:nbisecthalf),cwtr2ltmp2(0:nspin-1,nisospin,0:nbisecthalf) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
     logical :: reject	
    
     irightbisect=ileftbisect+nbisecthalf
@@ -2026,15 +2422,15 @@ contains
     !xoldtmp(i,:,:)=oldristra(i)%x
     !enddo
      
-    cwtbegintmp(:,:)=cwtl2r(ileftbisect,:,:)
-    cwtendtmp(:,:)=cwtr2l(ileftbisect+nbisecthalf,:,:)  
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisecthalf)  
    
     ! tmp1 deal with oldlv
-    cwtl2rtmp1(0:nbisecthalf,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisecthalf,:,:)
-    cwtr2ltmp1(0:nbisecthalf,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisecthalf,:,:)
+    cwtl2rtmp1(:,:,0:nbisecthalf)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisecthalf)
+    cwtr2ltmp1(:,:,0:nbisecthalf)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisecthalf)
     ! tmp2 deal with newlv   
-    cwtl2rtmp2(0:nbisecthalf,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisecthalf,:,:)
-    cwtr2ltmp2(0:nbisecthalf,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisecthalf,:,:)
+    cwtl2rtmp2(:,:,0:nbisecthalf)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisecthalf)
+    cwtr2ltmp2(:,:,0:nbisecthalf)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisecthalf)
    
     oldlv=1.
     newlv=1.   
@@ -2067,13 +2463,13 @@ contains
 		    jp=(l-1)*jd
 		    xold=oldristra(j)%x
             xnew=newristra(j)%x
-		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
+		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
  
 	    enddo
 	    jmax=lmax*jd
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp(:,:)) )) 	   
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp(:,:)) ))	   
+	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 	   
+	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	   
 	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))+log(oldlv(bilvl-1))-log(newlv(bilvl-1))   
   	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
 	    rn=randn(1)	   
@@ -2102,24 +2498,24 @@ contains
         xl=ristra(0)%x     
 	    xr=ristra(nchorizo)%x     
  
-	    cwtl2r(ileftbisect+1:ileftbisect+nbisecthalf-1,:,:)=cwtl2rtmp2(1:jmax,:,:) ! here jmax should already be 2**mmax-1 
+	    cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisecthalf-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1 
 	    if ((ileftbisect+nbisecthalf).le.nchorizo-1) then
         do k=ileftbisect+nbisecthalf,nchorizo-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
         enddo
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
         else
         !ileftbisect+nbisect=nchorizo  
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))   
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
         endif
     
     ! update cwtr2l for all the beads
 	    do k=ileftbisect+nbisecthalf-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
     
     endif     
    
@@ -2134,16 +2530,13 @@ contains
     use random
     use v6stepcalc
     use brut
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt &
-                        ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xref(3,npart) &
+    integer(kind=i4) :: ileftbisect,i &
+					    ,irightbisect 
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xnew(3,npart),xold(3,npart),xref(3,npart) &
                     ,xd2old(3,npart),xd2new(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3,rt3
+    real(kind=r8) :: tmp1,tmp2,logratio &
+	                ,rt2,rt3
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
 	
@@ -2174,12 +2567,12 @@ contains
 	    !call psitcwt(xold,cwtold)
       
 	    cwtold=cwtend
-        cwtr2ltmp(:,:)=cwtr2l(i,:,:)
+        cwtr2ltmp(:,:)=cwtr2l(:,:,i)
          
-	    tmp1=log(abs(real(sum(conjg(cwtl2r(i,:,:))*cwtold(:,:)))))
+	    tmp1=log(abs(real(sum(conjg(cwtl2r(:,:,i))*cwtold(:,:)))))
 	    !call psitcwt(xnew,cwtnew)
 	    call corop(xnew,ipro,jpro,cwtnew)
-	    call v6propl(xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+	    call v6propl(xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtnew(:,:)))))
 	    xd2new=(ristra(i-1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2 
@@ -2197,13 +2590,13 @@ contains
 
 	    ristra(i)%x=xnew
         cwtend=cwtnew
-        call v6propr(xnew,-1,cwtend(:,:),cwtr2l(i,:,:))
+        call v6propr(xnew,-1,cwtend(:,:),cwtr2l(:,:,i))
         call bisectv6improvehalf(ileftbisect)
         if (rejectbisectv6improvehalf) then 
         ! set the values back. nothing changed.   
         cwtend=cwtold   
         ristra(i)%x=xold
-        cwtr2l(i,:,:)=cwtr2ltmp(:,:) 
+        cwtr2l(:,:,i)=cwtr2ltmp(:,:) 
         else
             ibisectr=ibisectr+1   
         endif 
@@ -2211,12 +2604,12 @@ contains
   
         else
 	   
-        cwtr2ltmp(:,:)=cwtr2l(i,:,:)
-        cwtold=cwtl2r(i,:,:)
-	    call v6proplr(xnew,xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+        cwtr2ltmp(:,:)=cwtr2l(:,:,i)
+        cwtold=cwtl2r(:,:,i)
+	    call v6proplr(xnew,xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	   
-	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(i+1,:,:)))))
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i+1,:,:)))))
+	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(:,:,i+1)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i+1)))))
 	    
 	    xd2new=(ristra(i-1)%x-xnew)**2+(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2+(ristra(i+1)%x-xold)**2
@@ -2233,11 +2626,11 @@ contains
 
 	    if (log(rn(1)).lt.logratio) then
 	    ristra(i)%x=xnew 
-        call v6proplr(xnew,xnew,-1,cwtr2l(i+1,:,:),cwtr2l(i,:,:))
+        call v6proplr(xnew,xnew,-1,cwtr2l(:,:,i+1),cwtr2l(:,:,i))
         call bisectv6improvehalf(ileftbisect)
         if (rejectbisectv6improvehalf) then 
         ! set the values back. nothing changed.   
-        cwtr2l(i,:,:)=cwtr2ltmp(:,:)   
+        cwtr2l(:,:,i)=cwtr2ltmp(:,:)   
         ristra(i)%x=xold
         else
             ibisectr=ibisectr+1   
@@ -2256,16 +2649,13 @@ contains
     use random
     use v6stepcalc
     use brut
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt &
-                        ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xref(3,npart) &
+    integer(kind=i4) :: ileftbisect,i &
+					    ,irightbisect 
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xnew(3,npart),xold(3,npart),xref(3,npart) &
                     ,xd2old(3,npart),xd2new(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3,rt3
+    real(kind=r8) :: tmp1,tmp2,logratio &
+	                ,rt2,rt3
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin) 	              
    
@@ -2294,12 +2684,12 @@ contains
 	    if (i.eq.0) then   
     
 	    cwtold=cwtbegin
-        cwtl2rtmp(:,:)=cwtl2r(i,:,:)
+        cwtl2rtmp(:,:)=cwtl2r(:,:,i)
         
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i,:,:)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i)))))
 	    !call psitcwt(xnew,cwtnew)  
 	    call corop(xnew,iplo,jplo,cwtnew)
-	    call v6propl(xnew,-1,cwtr2l(i+1,:,:),cwtr2ltmp(:,:))
+	    call v6propl(xnew,-1,cwtr2l(:,:,i+1),cwtr2ltmp(:,:))
 	    tmp2=log(abs(real(sum(conjg(cwtnew(:,:))*cwtr2ltmp(:,:)))))
 	    xd2new=(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i+1)%x-xold)**2
@@ -2319,14 +2709,14 @@ contains
     ! update cwtbegin
         cwtbegin=cwtnew	   
     ! update cwtl2r	   
-	    call v6propr(xnew,-1,cwtnew(:,:),cwtl2r(i,:,:)) ! just update the i. 
+	    call v6propr(xnew,-1,cwtnew(:,:),cwtl2r(:,:,i)) ! just update the i. 
     
         call bisectv6improvehalf(ileftbisect)
         if (rejectbisectv6improvehalf) then 
         ! set the values back. nothing changed.   
         cwtbegin=cwtold   
         ristra(i)%x=xold
-        cwtl2r(i,:,:)=cwtl2rtmp(:,:) 
+        cwtl2r(:,:,i)=cwtl2rtmp(:,:) 
         else
             ibisectl=ibisectl+1   
         endif   
@@ -2334,11 +2724,11 @@ contains
       
         else
 	        
-        cwtold=cwtl2r(i,:,:)
-	    call v6proplr(xnew,xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+        cwtold=cwtl2r(:,:,i)
+	    call v6proplr(xnew,xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	   
-	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(i+1,:,:)))))
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i+1,:,:)))))
+	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(:,:,i+1)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i+1)))))
 	    
 	    xd2new=(ristra(i-1)%x-xnew)**2+(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2+(ristra(i+1)%x-xold)**2
@@ -2355,11 +2745,11 @@ contains
 
 	    if (log(rn(1)).lt.logratio) then
 	    ristra(i)%x=xnew 
-        call v6proplr(xnew,xnew,-1,cwtl2r(i-1,:,:),cwtl2r(i,:,:))
+        call v6proplr(xnew,xnew,-1,cwtl2r(:,:,i-1),cwtl2r(:,:,i))
         call bisectv6improvehalf(ileftbisect)
         if (rejectbisectv6improvehalf) then 
         ! set the values back. nothing changed.   
-        cwtl2r(i,:,:)=cwtold
+        cwtl2r(:,:,i)=cwtold
         ristra(i)%x=xold
         else
             ibisectl=ibisectl+1   
@@ -2379,21 +2769,18 @@ contains
     use v6stepcalc
     use brut
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt &
                         ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),x0new(3,npart),xold(3,npart) &
-                    ,x0old(3,npart),xendold(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: x(3,npart),xnew(3,npart),x0new(3,npart),xold(3,npart) 
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmaxhalf),newlv(0:mmaxhalf)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisecthalf,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisecthalf,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisecthalf,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisecthalf,0:nspin-1,nisospin) &
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisecthalf) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:nbisecthalf) &
 	                    ,cwtendtmp(0:nspin-1,nisospin) &
-                        ,cwtbegintmp1(0:nspin-1,nisospin),cwtbegintmp2(0:nspin-1,nisospin) &
-                        ,cwtendtmpnow(0:nspin-1,nisospin)             
+                        ,cwtbegintmp2(0:nspin-1,nisospin)        
     logical :: reject	
 
     ibisecttotl=ibisecttotl+1  
@@ -2417,7 +2804,7 @@ contains
     ! deal with the two ends first, then do the classic bisection.   
    
     newristra(nbisectnow)=oldristra(nbisectnow)   
-    cwtendtmp(:,:)=cwtr2l(ileftbisect+nbisectnow,:,:)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisectnow)
  
     newristra(0)%x=oldristra(nbisectnow)%x+sigmamid*reshape(gaussian(3*npart),(/3,npart/))
    
@@ -2430,8 +2817,8 @@ contains
     oldlv(0)=1.
     newlv(0)=1.
 
-    cwtl2rtmp1(0,:,:)=cwtl2r(ileftbisect,:,:)
-    call v6propr(x0new,-1,cwtbegintmp2,cwtl2rtmp2(0,:,:)) 
+    cwtl2rtmp1(:,:,0)=cwtl2r(:,:,ileftbisect)
+    call v6propr(x0new,-1,cwtbegintmp2,cwtl2rtmp2(:,:,0)) 
    
     ! prepare the further new bisection positions
     do bilvl=1,mmaxnow   ! level 1 to N. mmax = the total level N.
@@ -2458,8 +2845,8 @@ contains
 		    jp=(l-1)*jd
 		    xold=oldristra(j)%x
             xnew=newristra(j)%x
-		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
+		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
 		    !if ( sum((xnew-xold)**2).eq.0) then
 			    !write(6,*) 'bilvl=',bilvl	
 			    !write(6,*) 'l=',l,j,jp
@@ -2468,8 +2855,8 @@ contains
 		    !endif   
 	    enddo
 	    jmax=lmax*jd  
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp(:,:)) ))	
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp(:,:)) )) 
+	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	
+	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 
 	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))+log(oldlv(bilvl-1))-log(newlv(bilvl-1))   
   	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
 	    rn=randn(1)	   
@@ -2495,23 +2882,23 @@ contains
 	    xr=ristra(nchorizo)%x 
     ! update cwtl2r, cwtr2l.	 
         cwtbegin=cwtbegintmp2
-	    cwtl2r(ileftbisect:ileftbisect+nbisectnow-1,:,:)=cwtl2rtmp2(0:jmax,:,:) ! here jmax should already be 2**mmax-1    
+	    cwtl2r(:,:,ileftbisect:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,0:jmax) ! here jmax should already be 2**mmax-1    
 	    if ((ileftbisect+nbisectnow).le.nchorizo-1) then
         do k=ileftbisect+nbisectnow,nchorizo-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
         enddo
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
         else
         !ileftbisect+nbisect=nchorizo  
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))   
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))   
         endif       
     ! update cwtr2l for all the beads
 	    do k=ileftbisect+nbisectnow-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	   
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	   
     endif    
   
     return  
@@ -2525,18 +2912,16 @@ contains
     use v6stepcalc
     use brut
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl &
 	                    ,dtexpt &
                         ,nbisectnow,mmaxnow
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart) &
-                    ,x0old(3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
+    real(kind=r8) :: xmid(3,npart),xl(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmaxhalf),newlv(0:mmaxhalf)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisecthalf,0:nspin-1,nisospin),cwtl2rtmp2(0:nbisecthalf,0:nspin-1,nisospin) &
-	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin) &
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisecthalf),cwtl2rtmp2(0:nspin-1,nisospin,0:nbisecthalf) &
+	                    ,cwtbegintmp(0:nspin-1,nisospin) &
                         ,cwtendtmp1now(0:nspin-1,nisospin),cwtendtmp2now(0:nspin-1,nisospin)   	              
                       
     logical :: reject	
@@ -2561,7 +2946,7 @@ contains
  
     ! deal with the two ends first, then do the classic bisection.   
     newristra(0)=oldristra(0) 
-    cwtbegintmp(:,:)=cwtl2r(ileftbisect,:,:)
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
    
     newristra(nbisectnow)%x=oldristra(0)%x+sigmamid*reshape(gaussian(3*npart),(/3,npart/))
    
@@ -2573,8 +2958,8 @@ contains
     oldlv(0)=1.
     newlv(0)=1.
    
-    cwtl2rtmp1(0,:,:)=cwtl2r(ileftbisect,:,:)
-    cwtl2rtmp2(0,:,:)=cwtl2rtmp1(0,:,:)
+    cwtl2rtmp1(:,:,0)=cwtl2r(:,:,ileftbisect)
+    cwtl2rtmp2(:,:,0)=cwtl2rtmp1(:,:,0)
     call v6propr(oldristra(nbisectnow)%x,-1,cwtend,cwtendtmp1now)  
     call v6propr(newristra(nbisectnow)%x,-1,cwtendnew,cwtendtmp2now)    
      
@@ -2602,8 +2987,8 @@ contains
 		    jp=(l-1)*jd
 		    xold=oldristra(j)%x
             xnew=newristra(j)%x
-		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
+		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
 		    !if ( sum((xnew-xold)**2).eq.0) then
 			    !write(6,*) 'bilvl=',bilvl	
 			    !write(6,*) 'l=',l,j,jp
@@ -2612,8 +2997,8 @@ contains
 		    !endif   
 	    enddo
 	    jmax=lmax*jd  
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp1now(:,:)) ))	
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp2now(:,:)) )) 
+	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp1now(:,:)) ))	
+	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp2now(:,:)) )) 
 	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))+log(oldlv(bilvl-1))-log(newlv(bilvl-1))   
   	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
 	    rn=randn(1)	   
@@ -2640,20 +3025,20 @@ contains
 	 	 
     ! update cwtl2r, cwtr2l.	 
     ! update cwtl2r for all beads. this can be optimized in the future.
-        cwtl2r(ileftbisect+1:ileftbisect+nbisectnow-1,:,:)=cwtl2rtmp2(1:jmax,:,:) ! here jmax should already be 2**mmax-1  
+        cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisectnow-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1  
   
-        call v6propl(ristra(nchorizo)%x,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:)) ! ileftbisect+nbisectnow=nchorizo  
+        call v6propl(ristra(nchorizo)%x,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo)) ! ileftbisect+nbisectnow=nchorizo  
 
      
         ! update cwtr2l for all the beads
         cwtend=cwtendnew         
-        cwtr2l(nchorizo,:,:)=cwtendtmp2now
+        cwtr2l(:,:,nchorizo)=cwtendtmp2now
 	    do k=nchorizo-1,1,-1
         x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
         xl=ristra(0)%x
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
 
     endif    
                      
@@ -2682,17 +3067,15 @@ contains
     use random
     use v6stepcalc
     integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
+					    ,irightbisect,k,bilvl,n1,n2 &
 	                    ,dtexpt
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    real(kind=r8) :: rn(1),tau,sigmamid,gauss(3,npart)
     real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart)
+    real(kind=r8) :: tmp 
     complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
+    complex(kind=r8) :: cwtl2rtmp1(0:nspin-1,nisospin,0:nbisect),cwtr2ltmp1(0:nspin-1,nisospin,0:nbisect) &
+	                    ,cwtl2rtmp2(0:nspin-1,nisospin,0:nbisect),cwtr2ltmp2(0:nspin-1,nisospin,0:nbisect) &
 	                    ,cwtbegintmp(0:nspin-1,nisospin),cwtendtmp(0:nspin-1,nisospin)
     logical :: reject	
     icbisecttot=icbisecttot+1
@@ -2720,15 +3103,15 @@ contains
     !xoldtmp(i,:,:)=oldristra(i)%x
     !enddo
      
-    cwtbegintmp(:,:)=cwtl2r(ileftbisect,:,:)
-    cwtendtmp(:,:)=cwtr2l(ileftbisect+nbisect,:,:)
+    cwtbegintmp(:,:)=cwtl2r(:,:,ileftbisect)
+    cwtendtmp(:,:)=cwtr2l(:,:,ileftbisect+nbisect)
    
     ! tmp1 deal with oldlv
-    cwtl2rtmp1(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtr2ltmp1(0:nbisect,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisect,:,:)
+    cwtl2rtmp1(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtr2ltmp1(:,:,0:nbisect)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisect)
     ! tmp2 deal with newlv   
-    cwtl2rtmp2(0:nbisect,:,:)=cwtl2r(ileftbisect:ileftbisect+nbisect,:,:)
-    cwtr2ltmp2(0:nbisect,:,:)=cwtr2l(ileftbisect:ileftbisect+nbisect,:,:)
+    cwtl2rtmp2(:,:,0:nbisect)=cwtl2r(:,:,ileftbisect:ileftbisect+nbisect)
+    cwtr2ltmp2(:,:,0:nbisect)=cwtr2l(:,:,ileftbisect:ileftbisect+nbisect)
    
     oldlv=1.
     newlv=1.
@@ -2790,8 +3173,8 @@ contains
 		    jp=(l-1)*jd
 		    xold=oldristra(j)%x
             xnew=newristra(j)%x
-		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(jp,:,:),cwtl2rtmp1(j,:,:))    ! should be lr, not rl I believe.
-		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(jp,:,:),cwtl2rtmp2(j,:,:))  	   
+		    call v6proplr(xold,xold,dtexpt,cwtl2rtmp1(:,:,jp),cwtl2rtmp1(:,:,j))    ! should be lr, not rl I believe.
+		    call v6proplr(xnew,xnew,dtexpt,cwtl2rtmp2(:,:,jp),cwtl2rtmp2(:,:,j))  	   
 		    !if ( sum((xnew-xold)**2).eq.0) then
 			    !write(6,*) 'bilvl=',bilvl	
 			    !write(6,*) 'l=',l,j,jp
@@ -2800,8 +3183,8 @@ contains
 		    !endif   
 	    enddo
 	    jmax=lmax*jd
-	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(jmax,:,:))*cwtendtmp(:,:)) )) 	   
-	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(jmax,:,:))*cwtendtmp(:,:)) ))	   
+	    newlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp2(:,:,jmax))*cwtendtmp(:,:)) )) 	   
+	    oldlv(bilvl)=abs(real( sum(conjg(cwtl2rtmp1(:,:,jmax))*cwtendtmp(:,:)) ))	   
 	    tmp=log(newlv(bilvl))-log(oldlv(bilvl))+log(oldlv(bilvl-1))-log(newlv(bilvl-1))   
   	    !tmp=(newlv(bilvl)/oldlv(bilvl))*(oldlv(bilvl-1)/newlv(bilvl-1))
 	    rn=randn(1)	   
@@ -2829,10 +3212,10 @@ contains
 	    !        write(6,*) 'tmp ln(rn)=',tmp,log(rn(1))		   
 		    !     write (6,*) 'lv=',oldlv(bilvl),newlv(bilvl),oldlv(bilvl-1),newlv(bilvl-1)
 		    !  write(6,*) 'cwtbegintmp+*cwtendtmp=',sum(conjg(cwtbegintmp(:,:))*cwtendtmp(:,:))
-		    !  !write(6,*) 'cwtl2rtmp1=',cwtl2rtmp1(jmax,:,:),jmax
+		    !  !write(6,*) 'cwtl2rtmp1=',cwtl2rtmp1(:,:,jmax),jmax
 		    !  !write(6,*) 'xold=',xold	
     !           !write(6,*) 'xnew=',xnew	
-		    !  !write(6,*) 'cwtl2rtmp2=',cwtl2rtmp2(jmax,:,:)	
+		    !  !write(6,*) 'cwtl2rtmp2=',cwtl2rtmp2(:,:,jmax)	
 		    !  !write(6,*) 'cwtendtmp=',cwtendtmp
 		    !
 		    !     !stop
@@ -2862,15 +3245,15 @@ contains
         xr=ristra(nchorizo)%x
         xl=ristra(0)%x
      
-        cwtl2r(ileftbisect+1:ileftbisect+nbisect-1,:,:)=cwtl2rtmp2(1:jmax,:,:) ! here jmax should already be 2**mmax-1 
+        cwtl2r(:,:,ileftbisect+1:ileftbisect+nbisect-1)=cwtl2rtmp2(:,:,1:jmax) ! here jmax should already be 2**mmax-1 
         if ((ileftbisect+nbisect).le.nchorizo-1) then
         do k=ileftbisect+nbisect,nchorizo-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
 	    enddo
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
         else
-        call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))    
+        call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))    
         endif
      
      
@@ -2878,9 +3261,9 @@ contains
      
 	    do k=ileftbisect+nbisect-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))  	
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))  	
     endif  
     else
    
@@ -2952,7 +3335,7 @@ contains
     end subroutine bisectv6improvew11      
 
    
-    subroutine stdmove1fastv6a(ileft,iright) ! need to modify.
+    subroutine stdmove1fastv6a(ileft,iright) ! need to modify. have not done I think, 20190629. may not needed.
     ! ileft < iright; update from left to right. 
     ! This is move 1 by 1, but different way of move, this is like a 2-beads bisect.
     use wavefunction
@@ -2960,13 +3343,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    integer(kind=i4) :: i,k,ileft,iright,icnow
+    real(kind=r8) :: rn(1),gauss(3,npart)
     real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2,tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
+    real(kind=r8) :: rt2,tmp1,tmp2,logratio
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
 
@@ -3002,10 +3383,10 @@ contains
 	  
 	    cwtold=cwtbegin
 	  
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i,:,:)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i)))))
 	    !call psitcwt(xnew,cwtnew)  
 	    call corop(xnew,iplo,jplo,cwtnew)
-	    call v6propl(xnew,-1,cwtr2l(i+1,:,:),cwtr2ltmp(:,:))
+	    call v6propl(xnew,-1,cwtr2l(:,:,i+1),cwtr2ltmp(:,:))
 	    tmp2=log(abs(real(sum(conjg(cwtnew(:,:))*cwtr2ltmp(:,:)))))
 	    xd2new=(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i+1)%x-xold)**2
@@ -3020,14 +3401,14 @@ contains
         icnow=icnow+1 
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtr2l(i,:,:)=cwtr2ltmp(:,:)   
+	    cwtr2l(:,:,i)=cwtr2ltmp(:,:)   
     ! update cwtbegin
         cwtbegin=cwtnew	   
     ! update cwtl2r	   
-	    call v6propr(xnew,-1,cwtnew(:,:),cwtl2r(i,:,:)) ! just update the i.
+	    call v6propr(xnew,-1,cwtnew(:,:),cwtl2r(:,:,i)) ! just update the i.
     ! prepare for the next cwtl2r
         xoldnxt=ristra(i+1)%x
-        call v6proplr(xoldnxt,xoldnxt,-1,cwtl2r(i,:,:),cwtl2r(i+1,:,:))            
+        call v6proplr(xoldnxt,xoldnxt,-1,cwtl2r(:,:,i),cwtl2r(:,:,i+1))            
 	    endif 
 	  
 	    else
@@ -3035,10 +3416,10 @@ contains
 	    if (i.eq.nchorizo) then   
 	    !call psitcwt(xold,cwtold)
 	    cwtold=cwtend
-	    tmp1=log(abs(real(sum(conjg(cwtl2r(i,:,:))*cwtold(:,:)))))
+	    tmp1=log(abs(real(sum(conjg(cwtl2r(:,:,i))*cwtold(:,:)))))
 	    !call psitcwt(xnew,cwtnew)
 	    call corop(xnew,ipro,jpro,cwtnew)
-	    call v6propl(xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+	    call v6propl(xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtnew(:,:)))))
 	    xd2new=(ristra(i-1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2
@@ -3053,18 +3434,18 @@ contains
         icnow=icnow+1
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtl2r(i,:,:)=cwtl2rtmp(:,:)
+	    cwtl2r(:,:,i)=cwtl2rtmp(:,:)
     ! update cwtend
         cwtend=cwtnew
 	    endif 		     
 	   
 	    else
 	   
-        cwtold=cwtl2r(i,:,:)
-	    call v6proplr(xnew,xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+        cwtold=cwtl2r(:,:,i)
+	    call v6proplr(xnew,xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	   
-	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(i+1,:,:)))))
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i+1,:,:)))))
+	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(:,:,i+1)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i+1)))))
 	    
 	    xd2new=(ristra(i-1)%x-xnew)**2+(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2+(ristra(i+1)%x-xold)**2
@@ -3080,17 +3461,17 @@ contains
         icnow=icnow+1           
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtl2r(i,:,:)=cwtl2rtmp(:,:)	
+	    cwtl2r(:,:,i)=cwtl2rtmp(:,:)	
         endif
        
         if ( icnow /= 0 ) then
     ! update l2r
             if (i.le.(nchorizo-2)) then
 		    x=ristra(i+1)%x
-		    call v6proplr(x,x,-1,cwtl2r(i,:,:),cwtl2r(i+1,:,:))
+		    call v6proplr(x,x,-1,cwtl2r(:,:,i),cwtl2r(:,:,i+1))
             else ! i=nchorizo-1
             xr=ristra(i+1)%x
-            call v6propl(xr,-1,cwtl2r(i,:,:),cwtl2r(i+1,:,:))	    
+            call v6propl(xr,-1,cwtl2r(:,:,i),cwtl2r(:,:,i+1))	    
             endif               
         endif 
     
@@ -3105,43 +3486,43 @@ contains
     if (iright <= nchorizo-2) then 
         do k=iright,nchorizo-2
             x=ristra(k+1)%x
-            call v6proplr(x,x,-1,cwtl2r(k,:,:),cwtl2r(k+1,:,:))   
+            call v6proplr(x,x,-1,cwtl2r(:,:,k),cwtl2r(:,:,k+1))   
         enddo
-        call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	      
+        call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	      
     else  
         if (iright == nchorizo-1) then   
-            call v6propl(xr,-1,cwtl2r(iright,:,:),cwtl2r(nchorizo,:,:))	          
+            call v6propl(xr,-1,cwtl2r(:,:,iright),cwtl2r(:,:,nchorizo))	          
         endif 
     endif     
     ! update cwtr2l from iright th bead until the 0th.
     if (iright == nchorizo) then    
         !x=ristra(iright)%x   
-	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(iright,:,:))
+	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(:,:,iright))
 	    do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	    
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	    
     else      
         if (iright >= 2) then  
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))
         do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         else ! iright =1 or 0
           
         if (iright == 1) then   
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))   
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))   
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(iright,:,:),cwtr2l(0,:,:))	
+	    call v6propl(xl,-1,cwtr2l(:,:,iright),cwtr2l(:,:,0))	
         else ! iright =0
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         endif
        
         endif  
@@ -3161,13 +3542,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
+    integer(kind=i4) :: i,k,ileft,iright,icnow
+    real(kind=r8) :: rn(1),gauss(3,npart)
     real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2,tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
+    real(kind=r8) :: rt2,tmp1,tmp2,logratio
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
 
@@ -3203,10 +3582,10 @@ contains
 	  
 	    cwtold=cwtbegin
 	  
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i,:,:)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i)))))
 	    !call psitcwt(xnew,cwtnew)  
 	    call corop(xnew,iplo,jplo,cwtnew)
-	    call v6propl(xnew,-1,cwtr2l(i+1,:,:),cwtr2ltmp(:,:))
+	    call v6propl(xnew,-1,cwtr2l(:,:,i+1),cwtr2ltmp(:,:))
 	    tmp2=log(abs(real(sum(conjg(cwtnew(:,:))*cwtr2ltmp(:,:)))))
 	    xd2new=(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i+1)%x-xold)**2
@@ -3221,14 +3600,14 @@ contains
         icnow=icnow+1 
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtr2l(i,:,:)=cwtr2ltmp(:,:)   
+	    cwtr2l(:,:,i)=cwtr2ltmp(:,:)   
     ! update cwtbegin
         cwtbegin=cwtnew	   
     ! update cwtl2r	   
-	    call v6propr(xnew,-1,cwtnew(:,:),cwtl2r(i,:,:)) ! just update the i.
+	    call v6propr(xnew,-1,cwtnew(:,:),cwtl2r(:,:,i)) ! just update the i.
     ! prepare for the next cwtl2r
         xoldnxt=ristra(i+1)%x
-        call v6proplr(xoldnxt,xoldnxt,-1,cwtl2r(i,:,:),cwtl2r(i+1,:,:))            
+        call v6proplr(xoldnxt,xoldnxt,-1,cwtl2r(:,:,i),cwtl2r(:,:,i+1))            
 	    endif 
 	  
 	    else
@@ -3236,10 +3615,10 @@ contains
 	    if (i.eq.nchorizo) then   
 	    !call psitcwt(xold,cwtold)
 	    cwtold=cwtend
-	    tmp1=log(abs(real(sum(conjg(cwtl2r(i,:,:))*cwtold(:,:)))))
+	    tmp1=log(abs(real(sum(conjg(cwtl2r(:,:,i))*cwtold(:,:)))))
 	    !call psitcwt(xnew,cwtnew)
 	    call corop(xnew,ipro,jpro,cwtnew)
-	    call v6propl(xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+	    call v6propl(xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtnew(:,:)))))
 	    xd2new=(ristra(i-1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2
@@ -3254,18 +3633,18 @@ contains
         icnow=icnow+1
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtl2r(i,:,:)=cwtl2rtmp(:,:)
+	    cwtl2r(:,:,i)=cwtl2rtmp(:,:)
     ! update cwtend
         cwtend=cwtnew
 	    endif 		     
 	   
 	    else
 	   
-        cwtold=cwtl2r(i,:,:)
-	    call v6proplr(xnew,xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+        cwtold=cwtl2r(:,:,i)
+	    call v6proplr(xnew,xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	   
-	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(i+1,:,:)))))
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i+1,:,:)))))
+	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(:,:,i+1)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i+1)))))
 	    
 	    xd2new=(ristra(i-1)%x-xnew)**2+(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2+(ristra(i+1)%x-xold)**2
@@ -3281,17 +3660,17 @@ contains
         icnow=icnow+1           
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtl2r(i,:,:)=cwtl2rtmp(:,:)	
+	    cwtl2r(:,:,i)=cwtl2rtmp(:,:)	
         endif
        
         if ( icnow /= 0 ) then
     ! update l2r
             if (i.le.(nchorizo-2)) then
 		    x=ristra(i+1)%x
-		    call v6proplr(x,x,-1,cwtl2r(i,:,:),cwtl2r(i+1,:,:))
+		    call v6proplr(x,x,-1,cwtl2r(:,:,i),cwtl2r(:,:,i+1))
             else ! i=nchorizo-1
             xr=ristra(i+1)%x
-            call v6propl(xr,-1,cwtl2r(i,:,:),cwtl2r(i+1,:,:))	    
+            call v6propl(xr,-1,cwtl2r(:,:,i),cwtl2r(:,:,i+1))	    
             endif               
         endif 
     
@@ -3306,43 +3685,43 @@ contains
     if (iright <= nchorizo-2) then 
         do k=iright,nchorizo-2
             x=ristra(k+1)%x
-            call v6proplr(x,x,-1,cwtl2r(k,:,:),cwtl2r(k+1,:,:))   
+            call v6proplr(x,x,-1,cwtl2r(:,:,k),cwtl2r(:,:,k+1))   
         enddo
-        call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	      
+        call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	      
     else  
         if (iright == nchorizo-1) then   
-            call v6propl(xr,-1,cwtl2r(iright,:,:),cwtl2r(nchorizo,:,:))	          
+            call v6propl(xr,-1,cwtl2r(:,:,iright),cwtl2r(:,:,nchorizo))	          
         endif 
     endif     
     ! update cwtr2l from iright th bead until the 0th.
     if (iright == nchorizo) then    
         !x=ristra(iright)%x   
-	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(iright,:,:))
+	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(:,:,iright))
 	    do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	    
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	    
     else      
         if (iright >= 2) then  
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))
         do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         else ! iright =1 or 0
           
         if (iright == 1) then   
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))   
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))   
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(iright,:,:),cwtr2l(0,:,:))	
+	    call v6propl(xl,-1,cwtr2l(:,:,iright),cwtr2l(:,:,0))	
         else ! iright =0
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         endif
        
         endif  
@@ -3360,13 +3739,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
+    integer(kind=i4) :: i,k,ileft,iright,istep
+    real(kind=r8) :: rn(1),gauss(3,npart)
+    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2,tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
+    real(kind=r8) :: rt2,tmp1,tmp2,logratio
     complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
     complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
    
@@ -3405,10 +3782,10 @@ contains
 	  
 	    cwtold=cwtbegin
 	  
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i,:,:)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i)))))
 	    !call psitcwt(xnew,cwtnew)  
 	    call corop(xnew,iplo,jplo,cwtnew)
-	    call v6propl(xnew,-1,cwtr2l(i+1,:,:),cwtr2ltmp(:,:))
+	    call v6propl(xnew,-1,cwtr2l(:,:,i+1),cwtr2ltmp(:,:))
 	    tmp2=log(abs(real(sum(conjg(cwtnew(:,:))*cwtr2ltmp(:,:)))))
 	    xd2new=(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i+1)%x-xold)**2
@@ -3423,17 +3800,17 @@ contains
          
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtr2l(i,:,:)=cwtr2ltmp(:,:)
+	    cwtr2l(:,:,i)=cwtr2ltmp(:,:)
     ! update cwtbegin
         cwtbegin=cwtnew	   
     ! update cwtl2r	   
-	    call v6propr(xnew,-1,cwtnew(:,:),cwtl2r(i,:,:))
+	    call v6propr(xnew,-1,cwtnew(:,:),cwtl2r(:,:,i))
 	    do k=i+1,nchorizo-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+	    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
 	    enddo
 	    xr=ristra(nchorizo)%x
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	     
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	     
 	    !write(6,*) 'move succeed 0',i
      
 	    endif 
@@ -3443,10 +3820,10 @@ contains
 	    if (i.eq.nchorizo) then   
 	    !call psitcwt(xold,cwtold)
 	    cwtold=cwtend
-	    tmp1=log(abs(real(sum(conjg(cwtl2r(i,:,:))*cwtold(:,:)))))
+	    tmp1=log(abs(real(sum(conjg(cwtl2r(:,:,i))*cwtold(:,:)))))
 	    !call psitcwt(xnew,cwtnew)
 	    call corop(xnew,ipro,jpro,cwtnew)
-	    call v6propl(xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+	    call v6propl(xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtnew(:,:)))))
 	    xd2new=(ristra(i-1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2
@@ -3460,28 +3837,28 @@ contains
 	    if (log(rn(1)).lt.logratio) then
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtl2r(i,:,:)=cwtl2rtmp(:,:)
+	    cwtl2r(:,:,i)=cwtl2rtmp(:,:)
     ! update cwtend
         cwtend=cwtnew	   
     ! update cwtr2l	   
-	    call v6propr(xnew,-1,cwtnew(:,:),cwtr2l(i,:,:))
+	    call v6propr(xnew,-1,cwtnew(:,:),cwtr2l(:,:,i))
 	    do k=nchorizo-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	    
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	    
 	    !write(6,*) 'move succeed 0',i
 	    endif 		     
 	   
 	    else
 	   
-        cwtold=cwtl2r(i,:,:)
+        cwtold=cwtl2r(:,:,i)
 
-	    call v6proplr(xnew,xnew,-1,cwtl2r(i-1,:,:),cwtl2rtmp(:,:))
+	    call v6proplr(xnew,xnew,-1,cwtl2r(:,:,i-1),cwtl2rtmp(:,:))
 	   
-	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(i+1,:,:)))))
-	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(i+1,:,:)))))
+	    tmp2=log(abs(real(sum(conjg(cwtl2rtmp(:,:))*cwtr2l(:,:,i+1)))))
+	    tmp1=log(abs(real(sum(conjg(cwtold(:,:))*cwtr2l(:,:,i+1)))))
 	    
 	    xd2new=(ristra(i-1)%x-xnew)**2+(ristra(i+1)%x-xnew)**2
 	    xd2old=(ristra(i-1)%x-xold)**2+(ristra(i+1)%x-xold)**2
@@ -3498,7 +3875,7 @@ contains
            
 	    icmov1=icmov1+1	
 	    ristra(i)%x=xnew
-	    cwtl2r(i,:,:)=cwtl2rtmp(:,:)	
+	    cwtl2r(:,:,i)=cwtl2rtmp(:,:)	
 
         xr=ristra(nchorizo)%x
 	    xl=ristra(0)%x
@@ -3506,18 +3883,18 @@ contains
         if (i.le.(nchorizo-2)) then
 	    do k=i+1,nchorizo-1
 		    x=ristra(k)%x
-		    call v6proplr(x,x,-1,cwtl2r(k-1,:,:),cwtl2r(k,:,:))
+		    call v6proplr(x,x,-1,cwtl2r(:,:,k-1),cwtl2r(:,:,k))
 	    enddo
-	    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	
+	    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	
         else ! i=nchorizo-1
-        call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	    
+        call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	    
         endif     
     ! update r2l      
 	    do k=i,1,-1
             x=ristra(k)%x
-		    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))			
+		    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))			
 	    enddo
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	
 	    endif    
 	    endif 
 	    endif 	 
@@ -3552,15 +3929,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow,ileftnow,irightnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
+    integer(kind=i4) :: i,k,ileft,iright
+    real(kind=r8) :: rn(1),gauss(3,npart)
+    real(kind=r8) :: x(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2(0:nchorizo),tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
-    complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
-    complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
+    real(kind=r8) :: rt2(0:nchorizo),tmp1,tmp2,logratio
 
     if ((ileft.lt.0).or.(iright.gt.nchorizo).or.(iright.lt.0).or.(ileft.gt.nchorizo).or.(ileft.gt.iright)) then
 	    write (6,*) 'stdmove1fastv6 range error', ileft,iright
@@ -3587,7 +3960,7 @@ contains
 	    ristranew(i)%x=ristraold(i)%x+gauss    
     enddo
    
-    tmp1=log(abs(real(sum(conjg(cwtl2r(0,:,:))*cwtr2l(1,:,:)))))
+    tmp1=log(abs(real(sum(conjg(cwtl2r(:,:,0))*cwtr2l(:,:,1)))))
     tmp2=tmp1   
     rt2=0.
     cwtl2rnew=cwtl2r
@@ -3599,7 +3972,7 @@ contains
 		 
 	    !call psitcwt(xold,cwtold)  
 	    call corop(ristranew(i)%x,iplo,jplo,cwtbeginnew)
-	    call v6propr(ristranew(i)%x,-1,cwtbeginnew(:,:),cwtl2rnew(i,:,:)) ! just update the i.
+	    call v6propr(ristranew(i)%x,-1,cwtbeginnew(:,:),cwtl2rnew(:,:,i)) ! just update the i.
       
 	    xd2new=(  ristranew(i)%x - ristranew(i+1)%x  )**2
 	    xd2old=(  ristraold(i)%x - ristraold(i+1)%x  )**2
@@ -3613,12 +3986,12 @@ contains
 
 	    !call psitcwt(xnew,cwtnew)
 	    call corop(ristranew(i)%x,ipro,jpro,cwtendnew)
-	    call v6propl(ristranew(i)%x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
-        call v6propr(ristranew(i)%x,-1,cwtendnew,cwtr2lnew(i,:,:))
+	    call v6propl(ristranew(i)%x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
+        call v6propr(ristranew(i)%x,-1,cwtendnew,cwtr2lnew(:,:,i))
          
 	    else
 	   
-	    call v6proplr(ristranew(i)%x,ristranew(i)%x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
+	    call v6proplr(ristranew(i)%x,ristranew(i)%x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
 	    
         xd2new=(  ristranew(i)%x - ristranew(i+1)%x  )**2
 	    xd2old=(  ristraold(i)%x - ristraold(i+1)%x  )**2
@@ -3630,9 +4003,9 @@ contains
     enddo 
 
     if (iright /= nchorizo) then
-    tmp2=log(abs(real(sum(conjg(cwtl2rnew(iright,:,:))*cwtr2lnew(iright+1,:,:)))))
+    tmp2=log(abs(real(sum(conjg(cwtl2rnew(:,:,iright))*cwtr2lnew(:,:,iright+1)))))
     else
-    tmp2=log(abs(real(sum(conjg(cwtl2rnew(iright,:,:))*cwtendnew(:,:)))))   
+    tmp2=log(abs(real(sum(conjg(cwtl2rnew(:,:,iright))*cwtendnew(:,:)))))   
     endif
    
     if (ileft/=0) then
@@ -3650,7 +4023,7 @@ contains
        
         do i=ileft,iright
         ristra(i)=ristranew(i)
-        cwtl2r(i,:,:)=cwtl2rnew(i,:,:)
+        cwtl2r(:,:,i)=cwtl2rnew(:,:,i)
         enddo 
       
         if (ileft.eq.0) cwtbegin=cwtbeginnew
@@ -3663,43 +4036,43 @@ contains
     if (iright <= nchorizo-2) then 
         do k=iright,nchorizo-2
             x=ristra(k+1)%x
-            call v6proplr(x,x,-1,cwtl2r(k,:,:),cwtl2r(k+1,:,:))   
+            call v6proplr(x,x,-1,cwtl2r(:,:,k),cwtl2r(:,:,k+1))   
         enddo
-        call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	      
+        call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	      
     else  
         if (iright == nchorizo-1) then   
-            call v6propl(xr,-1,cwtl2r(iright,:,:),cwtl2r(nchorizo,:,:))	          
+            call v6propl(xr,-1,cwtl2r(:,:,iright),cwtl2r(:,:,nchorizo))	          
         endif 
     endif     
     ! update cwtr2l from iright th bead until the 0th.
     if (iright == nchorizo) then    
         !x=ristra(iright)%x   
-	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(iright,:,:))
+	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(:,:,iright))
 	    do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	    
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	    
     else      
         if (iright >= 2) then  
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))
         do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         else ! iright =1 or 0
           
         if (iright == 1) then   
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))   
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))   
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(iright,:,:),cwtr2l(0,:,:))	
+	    call v6propl(xl,-1,cwtr2l(:,:,iright),cwtr2l(:,:,0))	
         else ! iright =0
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         endif
        
         endif  
@@ -3719,15 +4092,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow,ileftnow,irightnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
+    integer(kind=i4) :: i,k,ileft,iright
+    real(kind=r8) :: rn(1),gauss(3,npart)
+    real(kind=r8) :: x(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2(0:nchorizo),tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
-    complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
-    complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
+    real(kind=r8) :: rt2(0:nchorizo),tmp1,tmp2,logratio
 
     if ((ileft.lt.0).or.(iright.gt.nchorizo).or.(iright.lt.0).or.(ileft.gt.nchorizo).or.(ileft.gt.iright)) then
 	    write (6,*) 'stdmove1fastv6 range error', ileft,iright
@@ -3755,7 +4124,7 @@ contains
 	    ristranew(i)%x=ristraold(i)%x+gauss    
     enddo ! just the shift. all beads shifted by the same amount.
    
-    tmp1=log(abs(real(sum(conjg(cwtl2r(0,:,:))*cwtr2l(1,:,:)))))
+    tmp1=log(abs(real(sum(conjg(cwtl2r(:,:,0))*cwtr2l(:,:,1)))))
     tmp2=tmp1   
     rt2=0.
     cwtl2rnew=cwtl2r
@@ -3767,7 +4136,7 @@ contains
 		 
 	    !call psitcwt(xold,cwtold)  
 	    call corop(ristranew(i)%x,iplo,jplo,cwtbeginnew)
-	    call v6propr(ristranew(i)%x,-1,cwtbeginnew(:,:),cwtl2rnew(i,:,:)) ! just update the i.
+	    call v6propr(ristranew(i)%x,-1,cwtbeginnew(:,:),cwtl2rnew(:,:,i)) ! just update the i.
       
 	    xd2new=(  ristranew(i)%x - ristranew(i+1)%x  )**2
 	    xd2old=(  ristraold(i)%x - ristraold(i+1)%x  )**2
@@ -3781,12 +4150,12 @@ contains
 
 	    !call psitcwt(xnew,cwtnew)
 	    call corop(ristranew(i)%x,ipro,jpro,cwtendnew)
-	    call v6propl(ristranew(i)%x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
-        call v6propr(ristranew(i)%x,-1,cwtendnew,cwtr2lnew(i,:,:))
+	    call v6propl(ristranew(i)%x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
+        call v6propr(ristranew(i)%x,-1,cwtendnew,cwtr2lnew(:,:,i))
          
 	    else
 	   
-	    call v6proplr(ristranew(i)%x,ristranew(i)%x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
+	    call v6proplr(ristranew(i)%x,ristranew(i)%x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
 	    
         xd2new=(  ristranew(i)%x - ristranew(i+1)%x  )**2
 	    xd2old=(  ristraold(i)%x - ristraold(i+1)%x  )**2
@@ -3798,9 +4167,9 @@ contains
     enddo 
 
     if (iright /= nchorizo) then
-    tmp2=log(abs(real(sum(conjg(cwtl2rnew(iright,:,:))*cwtr2lnew(iright+1,:,:)))))
+    tmp2=log(abs(real(sum(conjg(cwtl2rnew(:,:,iright))*cwtr2lnew(:,:,iright+1)))))
     else
-    tmp2=log(abs(real(sum(conjg(cwtl2rnew(iright,:,:))*cwtendnew(:,:)))))   
+    tmp2=log(abs(real(sum(conjg(cwtl2rnew(:,:,iright))*cwtendnew(:,:)))))   
     endif
    
     if (ileft/=0) then
@@ -3818,7 +4187,7 @@ contains
        
         do i=ileft,iright
         ristra(i)=ristranew(i)
-        cwtl2r(i,:,:)=cwtl2rnew(i,:,:)
+        cwtl2r(:,:,i)=cwtl2rnew(:,:,i)
         enddo 
       
         if (ileft.eq.0) cwtbegin=cwtbeginnew
@@ -3831,43 +4200,43 @@ contains
     if (iright <= nchorizo-2) then 
         do k=iright,nchorizo-2
             x=ristra(k+1)%x
-            call v6proplr(x,x,-1,cwtl2r(k,:,:),cwtl2r(k+1,:,:))   
+            call v6proplr(x,x,-1,cwtl2r(:,:,k),cwtl2r(:,:,k+1))   
         enddo
-        call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	      
+        call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	      
     else  
         if (iright == nchorizo-1) then   
-            call v6propl(xr,-1,cwtl2r(iright,:,:),cwtl2r(nchorizo,:,:))	          
+            call v6propl(xr,-1,cwtl2r(:,:,iright),cwtl2r(:,:,nchorizo))	          
         endif 
     endif     
     ! update cwtr2l from iright th bead until the 0th.
     if (iright == nchorizo) then    
         !x=ristra(iright)%x   
-	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(iright,:,:))
+	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(:,:,iright))
 	    do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	    
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	    
     else      
         if (iright >= 2) then  
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))
         do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         else ! iright =1 or 0
           
         if (iright == 1) then   
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))   
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))   
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(iright,:,:),cwtr2l(0,:,:))	
+	    call v6propl(xl,-1,cwtr2l(:,:,iright),cwtr2l(:,:,0))	
         else ! iright =0
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         endif
        
         endif  
@@ -3887,15 +4256,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow,ileftnow,irightnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),gauss1(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
+    integer(kind=i4) :: i,k,ileft,iright
+    real(kind=r8) :: rn(1),gauss(3,npart),gauss1(3,npart)
+    real(kind=r8) :: x(3,npart),xd2old(3,npart),xd2new(3,npart) &
 	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2(0:nchorizo),tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
-    complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
-    complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
+    real(kind=r8) :: rt2(0:nchorizo),tmp1,tmp2,logratio
 
     if ((ileft.lt.0).or.(iright.gt.nchorizo).or.(iright.lt.0).or.(ileft.gt.nchorizo).or.(ileft.gt.iright)) then
 	    write (6,*) 'stdmove1fastv6 range error', ileft,iright
@@ -3923,7 +4288,7 @@ contains
 	    ristranew(i)%x=ristraold(i)%x+gauss1+gauss    
     enddo ! just the shift. all beads shifted by the same amount.
    
-    tmp1=log(abs(real(sum(conjg(cwtl2r(0,:,:))*cwtr2l(1,:,:)))))
+    tmp1=log(abs(real(sum(conjg(cwtl2r(:,:,0))*cwtr2l(:,:,1)))))
     tmp2=tmp1   
     rt2=0.
     cwtl2rnew=cwtl2r
@@ -3935,7 +4300,7 @@ contains
 		 
 	    !call psitcwt(xold,cwtold)  
 	    call corop(ristranew(i)%x,iplo,jplo,cwtbeginnew)
-	    call v6propr(ristranew(i)%x,-1,cwtbeginnew(:,:),cwtl2rnew(i,:,:)) ! just update the i.
+	    call v6propr(ristranew(i)%x,-1,cwtbeginnew(:,:),cwtl2rnew(:,:,i)) ! just update the i.
       
 	    xd2new=(  ristranew(i)%x - ristranew(i+1)%x  )**2
 	    xd2old=(  ristraold(i)%x - ristraold(i+1)%x  )**2
@@ -3949,12 +4314,12 @@ contains
 
 	    !call psitcwt(xnew,cwtnew)
 	    call corop(ristranew(i)%x,ipro,jpro,cwtendnew)
-	    call v6propl(ristranew(i)%x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
-        call v6propr(ristranew(i)%x,-1,cwtendnew,cwtr2lnew(i,:,:))
+	    call v6propl(ristranew(i)%x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
+        call v6propr(ristranew(i)%x,-1,cwtendnew,cwtr2lnew(:,:,i))
          
 	    else
 	   
-	    call v6proplr(ristranew(i)%x,ristranew(i)%x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
+	    call v6proplr(ristranew(i)%x,ristranew(i)%x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
 	    
         xd2new=(  ristranew(i)%x - ristranew(i+1)%x  )**2
 	    xd2old=(  ristraold(i)%x - ristraold(i+1)%x  )**2
@@ -3966,9 +4331,9 @@ contains
     enddo 
 
     if (iright /= nchorizo) then
-    tmp2=log(abs(real(sum(conjg(cwtl2rnew(iright,:,:))*cwtr2lnew(iright+1,:,:)))))
+    tmp2=log(abs(real(sum(conjg(cwtl2rnew(:,:,iright))*cwtr2lnew(:,:,iright+1)))))
     else
-    tmp2=log(abs(real(sum(conjg(cwtl2rnew(iright,:,:))*cwtendnew(:,:)))))   
+    tmp2=log(abs(real(sum(conjg(cwtl2rnew(:,:,iright))*cwtendnew(:,:)))))   
     endif
    
     if (ileft/=0) then
@@ -3986,7 +4351,7 @@ contains
        
         do i=ileft,iright
         ristra(i)=ristranew(i)
-        cwtl2r(i,:,:)=cwtl2rnew(i,:,:)
+        cwtl2r(:,:,i)=cwtl2rnew(:,:,i)
         enddo 
       
         if (ileft.eq.0) cwtbegin=cwtbeginnew
@@ -3999,43 +4364,43 @@ contains
     if (iright <= nchorizo-2) then 
         do k=iright,nchorizo-2
             x=ristra(k+1)%x
-            call v6proplr(x,x,-1,cwtl2r(k,:,:),cwtl2r(k+1,:,:))   
+            call v6proplr(x,x,-1,cwtl2r(:,:,k),cwtl2r(:,:,k+1))   
         enddo
-        call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	      
+        call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	      
     else  
         if (iright == nchorizo-1) then   
-            call v6propl(xr,-1,cwtl2r(iright,:,:),cwtl2r(nchorizo,:,:))	          
+            call v6propl(xr,-1,cwtl2r(:,:,iright),cwtl2r(:,:,nchorizo))	          
         endif 
     endif     
     ! update cwtr2l from iright th bead until the 0th.
     if (iright == nchorizo) then    
         !x=ristra(iright)%x   
-	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(iright,:,:))
+	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(:,:,iright))
 	    do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	    
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	    
     else      
         if (iright >= 2) then  
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))
         do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         else ! iright =1 or 0
           
         if (iright == 1) then   
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))   
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))   
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(iright,:,:),cwtr2l(0,:,:))	
+	    call v6propl(xl,-1,cwtr2l(:,:,iright),cwtr2l(:,:,0))	
         else ! iright =0
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         endif
        
         endif  
@@ -4056,18 +4421,11 @@ contains
     use v6stepcalc
     use random
     use brut
-    integer(kind=i4) :: i,j,k,ileft,iright,istep,icnow,ileftnow,irightnow
-    real(kind=r8) :: rn(1),t,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xd2old(3,npart),xd2new(3,npart) &
-	                ,xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart)
-    real(kind=r8) :: rt1,rt2(0:nchorizo),tmp1,tmp2,logval,vtotold,vtotnew,psivalold,psivalnew,ratio &
-    ,logratio,logvalold,logvalnew
-    complex(kind=r8) :: cwtold(0:nspin-1,nisospin),cwtnew(0:nspin-1,nisospin)
-    complex(kind=r8) :: cwtl2rtmp(0:nspin-1,nisospin),cwtr2ltmp(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k,ileft,iright
+    real(kind=r8) :: rn(1),gauss(3,npart)
+    real(kind=r8) :: x(3,npart),xr(3,npart),xl(3,npart)
+    real(kind=r8) :: rt2(0:nchorizo),tmp1,tmp2,logratio
 
-   
-   
     ileft=0
     iright=nchorizo ! we do not set nchorizo as 0.
    
@@ -4086,7 +4444,7 @@ contains
 	    ristranew(i)%x=ristraold(i)%x+gauss    
     enddo
    
-    tmp1=log(abs(real(sum(conjg(cwtl2r(0,:,:))*cwtr2l(1,:,:)))))
+    tmp1=log(abs(real(sum(conjg(cwtl2r(:,:,0))*cwtr2l(:,:,1)))))
     tmp2=tmp1   
     rt2=0.
     cwtl2rnew=cwtl2r
@@ -4098,7 +4456,7 @@ contains
 		 
 	    !call psitcwt(xold,cwtold)  
 	    call corop(ristranew(i)%x,iplo,jplo,cwtbeginnew)
-	    call v6propr(ristranew(i)%x,-1,cwtbeginnew(:,:),cwtl2rnew(i,:,:)) ! just update the i.
+	    call v6propr(ristranew(i)%x,-1,cwtbeginnew(:,:),cwtl2rnew(:,:,i)) ! just update the i.
       
 	    !xd2new=(  ristranew(i)%x - ristranew(i+1)%x  )**2
 	    !xd2old=(  ristraold(i)%x - ristraold(i+1)%x  )**2
@@ -4112,12 +4470,12 @@ contains
 
 	    !call psitcwt(xnew,cwtnew)
 	    call corop(ristranew(i)%x,ipro,jpro,cwtendnew)
-	    call v6propl(ristranew(i)%x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
-        call v6propr(ristranew(i)%x,-1,cwtendnew,cwtr2lnew(i,:,:))
+	    call v6propl(ristranew(i)%x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
+        call v6propr(ristranew(i)%x,-1,cwtendnew,cwtr2lnew(:,:,i))
          
 	    else
 	   
-	    call v6proplr(ristranew(i)%x,ristranew(i)%x,-1,cwtl2rnew(i-1,:,:),cwtl2rnew(i,:,:))
+	    call v6proplr(ristranew(i)%x,ristranew(i)%x,-1,cwtl2rnew(:,:,i-1),cwtl2rnew(:,:,i))
 	    
         !xd2new=(  ristranew(i)%x - ristranew(i+1)%x  )**2
 	    !xd2old=(  ristraold(i)%x - ristraold(i+1)%x  )**2
@@ -4128,7 +4486,7 @@ contains
 	    endif 	 
     enddo 
 
-    tmp2=log(abs(real(sum(conjg(cwtl2rnew(iright,:,:))*cwtendnew(:,:)))))   
+    tmp2=log(abs(real(sum(conjg(cwtl2rnew(:,:,iright))*cwtendnew(:,:)))))   
 
    
     logratio=tmp2-tmp1+sum(rt2)
@@ -4140,7 +4498,7 @@ contains
        
         do i=ileft,iright
         ristra(i)=ristranew(i)
-        cwtl2r(i,:,:)=cwtl2rnew(i,:,:)
+        cwtl2r(:,:,i)=cwtl2rnew(:,:,i)
         enddo 
       
         if (ileft.eq.0) cwtbegin=cwtbeginnew
@@ -4153,43 +4511,43 @@ contains
     if (iright <= nchorizo-2) then 
         do k=iright,nchorizo-2
             x=ristra(k+1)%x
-            call v6proplr(x,x,-1,cwtl2r(k,:,:),cwtl2r(k+1,:,:))   
+            call v6proplr(x,x,-1,cwtl2r(:,:,k),cwtl2r(:,:,k+1))   
         enddo
-        call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))	      
+        call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))	      
     else  
         if (iright == nchorizo-1) then   
-            call v6propl(xr,-1,cwtl2r(iright,:,:),cwtl2r(nchorizo,:,:))	          
+            call v6propl(xr,-1,cwtl2r(:,:,iright),cwtl2r(:,:,nchorizo))	          
         endif 
     endif     
     ! update cwtr2l from iright th bead until the 0th.
     if (iright == nchorizo) then    
         !x=ristra(iright)%x   
-	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(iright,:,:))
+	    call v6propr(xr,-1,cwtend(:,:),cwtr2l(:,:,iright))
 	    do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	    
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	    
     else      
         if (iright >= 2) then  
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))
         do k=iright-1,1,-1
 	    x=ristra(k)%x
-	    call v6proplr(x,x,-1,cwtr2l(k+1,:,:),cwtr2l(k,:,:))
+	    call v6proplr(x,x,-1,cwtr2l(:,:,k+1),cwtr2l(:,:,k))
 	    enddo
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+	    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         else ! iright =1 or 0
           
         if (iright == 1) then   
         x=ristra(iright)%x
-        call v6proplr(x,x,-1,cwtr2l(iright+1,:,:),cwtr2l(iright,:,:))   
+        call v6proplr(x,x,-1,cwtr2l(:,:,iright+1),cwtr2l(:,:,iright))   
 	    !xl=ristra(0)%x
-	    call v6propl(xl,-1,cwtr2l(iright,:,:),cwtr2l(0,:,:))	
+	    call v6propl(xl,-1,cwtr2l(:,:,iright),cwtr2l(:,:,0))	
         else ! iright =0
-        call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))	   
+        call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))	   
         endif
        
         endif  
@@ -4285,38 +4643,42 @@ contains
     !   
    
 
-    subroutine corrchk(x,ixd,corrin,lmax)   ! lmax is useless, change it perhaps to kappa.
-! Interacting Electrons, Ceperley et al, p585. 
-! MC in ab initio quantum chemstry, Hammond et al, p59.    
+    subroutine corrchk(x,ixd,corrin,lmax)
+! Interacting Electrons, Ceperley et al, p585. MC in ab initio quantum chemstry, Hammond et al, p59.    
     use wavefunction
     use estimator
     use random
-    integer(kind=i4) :: ixd,lmax,lcorr,icorr,stepdecorr,i,j,k! lmax <= ixd, usally set ixd=lmax=nstepdecor
-    real(kind=r8) :: xave,xvar,tauintg
+    integer(kind=i4) :: ixd,lmax,lcorr,icorr,j! lmax <= ixd, usally set ixd=lmax=nstepdecor
+    real(kind=r8) :: xave,xvar
     real(kind=r8) :: x(:),corrin(:),kappa(ixd-1)
-    logical :: findstepdecorr
+    integer(kind=i4) :: iounit
+    logical :: findstepdecorr 
     ! nstepdecor usually set the same as nstep when do the correlation check.
     xave=sum(x(1:ixd))/ixd
     xvar=sum(x(1:ixd)**2)/ixd-xave**2      
     findstepdecorr=.false.
     corrin=0.
     kappa=0
-    OPEN(31,FILE='correlationcheck.txt',FORM='FORMATTED')
-    WRITE(31,'(2x,5(G15.8,2x))') 'k','corr(k)','kappa' 
+    OPEN(newunit=iounit,FILE='xcorrelationcheck.txt',FORM='FORMATTED')
+    WRITE(iounit,'(2x,5(G15.8,2x))') 'k','corr(k)','kappa' 
     do lcorr=1,ixd-1 ! k     
 	    do icorr=1,ixd-lcorr ! n
 		    corrin(lcorr)=corrin(lcorr)+ (x(icorr)-xave)*(x(icorr+lcorr)-xave)
 	    enddo
 	    corrin(lcorr)=corrin(lcorr)/(ixd-lcorr)/xvar 
         kappa(lcorr)=1+2*sum(corrin(1:lcorr))
-        WRITE(31,'(2x,20(G15.8,2x))') lcorr,corrin(lcorr),kappa(lcorr)
+        WRITE(iounit,'(2x,20(G15.8,2x))') lcorr,corrin(lcorr),kappa(lcorr)
     enddo    
-    close(31) 
+    close(iounit) 
+	OPEN(newunit=iounit,FILE='xcorrchk.txt',FORM='FORMATTED')
+    WRITE(iounit,'(2x,2(G15.8,2x))') 'k','x' 
+    do j=1,lmax 
+	    WRITE(iounit,'(2x,2(G15.8,2x))') j,x(j)	
+    enddo
+	close(iounit)
     return  
     end subroutine corrchk       
    
-
-     
     subroutine counterinitVMC
     ic0=0
     ic0tot=0
@@ -4330,12 +4692,14 @@ contains
     end subroutine showstatVMC
     
     subroutine zerepstepmon ! monitor the history of rqmc steps.
+    if (nrepmax.eq.0) return
     repstepct1=0
     repstepct2=0
     repstepct1sum=0
     repstepct2sum=0  
     icrephist=0
     icrephistlast=0
+    return
     end subroutine zerepstepmon
    
     subroutine counterinit ! zero the stats after finishing one block.
@@ -4383,11 +4747,13 @@ contains
     
     subroutine checkblkstat ! the check stuck config clock.
     use mympi
-    integer(kind=i4) :: i,j,k,myunit
+    use random
+    integer(kind=i4) :: myunit,k
     real(kind=r8) :: r(10)
     character(len=30) :: filename    
     real(kind=r8) :: xtot(3,npart,0:nchorizo)
     integer(kind=i4) :: ipl(6),jpl(6),ipr(6),jpr(6)
+    integer(kind=i8) :: irnout
       
     r(1)=dble(icmov1)/icmov1tot
     r(2)=dble(icstdmove2)/icstdmove2tot
@@ -4406,17 +4772,41 @@ contains
         if ( nblockstuck >= 5 ) then 
             if (sum(ibisectstuck(nblockstuck-4:nblockstuck)).eq.5) then
                 call chorizoallout(xtot,ipl,jpl,ipr,jpr) 
+                call showirn(irnout)
                 write(filename,'("myrank",i10,".stuck")') myrank()
                 open(newunit=myunit,form='formatted',file=trim(filename),position='rewind')  
-                    write (myunit,*) 'nsteps really stuck are ',nblockstuck            
-                    write (myunit,'(6i10)') ibisect,ibisecttot,ibisectl,ibisecttotl,ibisectr,ibisecttotr
-                    write (myunit,'(6i10)') ipl
-                    write (myunit,'(6i10)') jpl
-                    write (myunit,'(6i10)') ipr
-                    write (myunit,'(6i10)') jpr
-                    write (myunit,'(3e15.7)') reshape(xtot,(/3*npart*(nchorizo+1)/))      
+                write (myunit,*) 'nsteps really stuck are ',nblockstuck            
+                write (myunit,'(6i10)') ibisect,ibisecttot,ibisectl,ibisecttotl,ibisectr,ibisecttotr
+                write (myunit,*) 'irn seed is ',irnout 
+                
+                bisectrate(:)=bisectcount(:)/bisecttot(:)
+                write (myunit,*)  
+                write (myunit,'(''dt ='',t40,f10.5)') dt
+                write (myunit,'(''nchorizo ='',t40,i10)') nchorizo   
+                write (myunit,'(''acceptance ratio (mov1) ='',t40,f10.5,3(i10))') r(1),icmov1,icmov1tot,icstdmove1tot
+                write (myunit,'(''acceptance ratio (mov2) ='',t40,f10.5,2(i10))') r(2),icstdmove2,icstdmove2tot
+                write (myunit,'(''acceptance ratio (mov3 shift) ='',t40,f10.5,2(i10))') r(3),icshft,icshfttot
+                write (myunit,'(''ic23 ratio (stdmov23) ='',t40,f10.5,2(i10))') r(4),ic23,ic23tot
+                write (myunit,'(''icn ratio ='',t40,f10.5,2(i10))') r(5),icn,icntot
+                write (myunit,'(''lr ratio ='',t40,f10.5,2(i10))') r(myunit),iclr,iclrtot
+                write (myunit,'(''reptation ratio ='',t40,f10.5,3(i10))') r(7),icrep,icreptot
+                write (myunit,'(''ibisect ratio ='',t40,f10.5,3(i10))') r(8),ibisect,ibisecttot,icbisecttot
+                write (myunit,'(''bisection level 1 to mmax ratio ='',t40,f10.5)') (bisectrate(k),k=1,mmax)
+                write (myunit,'(''ibisect lend ratio ='',t40,f10.5,3(i10))') r(9),ibisectl,ibisecttotl
+                !write (myunit,'(''bisection lend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountl(k)/bisecttotl(k),k=0,mmax-1)
+                write (myunit,'(''ibisect rend ratio ='',t40,f10.5,3(i10))') r(10),ibisectr,ibisecttotr
+                !write (myunit,'(''bisection rend level 0 to mmaxnow ratio ='',t40,f10.5)') (bisectcountr(k)/bisecttotr(k),k=0,mmax-1)
+                write (myunit,'(''# of energy samples ='',t40,i10)') ice
+                write (myunit,*)   
+                
+                write (myunit,'(6i10)') ipl
+                write (myunit,'(6i10)') jpl
+                write (myunit,'(6i10)') ipr
+                write (myunit,'(6i10)') jpr
+                write (myunit,'(3e15.7)') reshape(xtot,(/3*npart*(nchorizo+1)/))      
                 close(myunit)
                 write(6,*) 'stuck configuration, abort! myrank= ', myrank()
+                write(myunit,*) 'stuck configuration, abort! myrank= ', myrank()
                 call abort                         
             endif       
         endif
@@ -4427,7 +4817,7 @@ contains
      
     subroutine showstat
     use mympi
-    integer(kind=i4) :: i,j,k
+    integer(kind=i4) :: k
     real(kind=r8) :: r(10)
       
     r(1)=dble(icmov1)/icmov1tot
@@ -4483,8 +4873,8 @@ contains
    
     subroutine bisectpickslices(ileftbisect,irightbisect,ipick) 
     use random
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,irightbisect,imidbisect,k,bilvl,ipick,na,nb
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright
+    integer(kind=i4) :: ileftbisect,irightbisect,ipick,na,nb
+    real(kind=r8) :: rn(1)
     rn=randn(1)
     ! need to initialize nbisect and nchorizo first.
     na=nbisect/2
@@ -4497,8 +4887,8 @@ contains
    
     subroutine bisectpicksliceswide(ileftbisect,irightbisect) 
     use random
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,irightbisect,imidbisect,k,bilvl,ipick,na,nb,nchorizotot
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright
+    integer(kind=i4) :: ileftbisect,irightbisect
+    real(kind=r8) :: rn(1)
     rn=randn(1)
     ! need to initialize nbisect and nchorizo first.
     ileftbisect=min(int(dble(nchorizo+1)*rn(1)),nchorizo) ! min just to make sure, not really need.
@@ -4520,20 +4910,8 @@ contains
     use estimator
     use random
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
-   
+    integer(kind=i4) :: i
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
     call getcwtgnd2(cwt)
     call v6propr(ristra(0)%x,i,cwt,cwttmp)
     return
@@ -4544,19 +4922,8 @@ contains
     use estimator
     use random
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call getcwtgnd2(cwt)
     call v6propl(ristra(0)%x,i,cwt,cwttmp)
@@ -4565,19 +4932,8 @@ contains
    
     subroutine cwtr(k,i,cwttmp,cwt)
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call v6propr(ristra(k)%x,i,cwttmp,cwt)    
     return
@@ -4585,19 +4941,8 @@ contains
    
     subroutine cwtrpr(k,i,cwttmp,cwt)
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call v6proprpr(ristra(k)%x,i,cwttmp,cwt)    
     return
@@ -4606,19 +4951,8 @@ contains
    
     subroutine cwtl(k,i,cwttmp,cwt)
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call v6propl(ristra(k)%x,i,cwttmp,cwt)    
     return
@@ -4626,19 +4960,8 @@ contains
    
     subroutine cwtlpr(k,i,cwttmp,cwt) ! pr means use -dt.
     use v6stepcalc
-    integer(kind=i4) :: ileftbisect,il,ir,i,imid,j,jp,jd,jmax,l,lmax &
-					    ,irightbisect,imidbisect,k,bilvl,ipick,na,nb,n1,n2 &
-	                    ,dtexpt,invspin,invispin
-    real(kind=r8) :: rn(1),t,tau,sigmamid,gauss(3,npart),prob,eleft,eright,rm,rmsq
-    real(kind=r8) :: xmid(3,npart),xr(3,npart),xl(3,npart)
-    real(kind=r8) :: rn3(3,npart),x(3,npart),xnew(3,npart),xold(3,npart),xoldnxt(3,npart),xoldtmp(0:nbisect,3,npart)
-    real(kind=r8) :: tmp,tmp1,tmp2,tmpq,logratio,logval,logval2 &
-	                ,logno,p1n,p1,rt2,p2n,p2,rt1,p3n,p3
-    real(kind=r8) :: vdiff(0:mmax),vsumold(0:mmax),vsumnew(0:mmax)
-    complex(kind=r8) :: oldlv(0:mmax),newlv(0:mmax)
-    complex(kind=r8) :: cwtl2rtmp1(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp1(0:nbisect,0:nspin-1,nisospin) &
-	                    ,cwtl2rtmp2(0:nbisect,0:nspin-1,nisospin),cwtr2ltmp2(0:nbisect,0:nspin-1,nisospin) &
-                        ,cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
+    integer(kind=i4) :: i,k
+    complex(kind=r8) :: cwttmp(0:nspin-1,nisospin),cwt(0:nspin-1,nisospin)
    
     call v6proplpr(ristra(k)%x,i,cwttmp,cwt)    
     return
@@ -4649,11 +4972,9 @@ contains
     integer(kind=i4) :: i,j,it,index,ntab	
     real(kind=r8) :: x(3,npart) ! the configuration for the system
     real(kind=r8) :: dx(3)
-    real(kind=r8) :: r,c1,c2,c3,c4,dr,tstep,val,e1,e5! tstep=dt*2**it
+    real(kind=r8) :: r,c1,c2,c3,c4,dr,val,e1,e5! tstep=dt*2**it
     real(kind=r8) :: u(6),evdt(6),scalep,rangev,u1(6),u2(6),evdtinv(6)
-    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-		                ,cwtnew1(0:nspin-1,nisospin),cwtnew2(0:nspin-1,nisospin) &
-		                ,cwt1(0:nspin-1,nisospin)
+    complex(kind=r8) :: cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin),cwt1(0:nspin-1,nisospin)
     real(kind=r8) :: utab(6,0:ntab,-mmax:mmax),evdttab(6,0:ntab,-mmax:mmax) 
     real(kind=r8) :: vtab(6,0:ntab)
 
@@ -4748,23 +5069,23 @@ contains
     use brut
     use v6stepcalc   
     use chorizos
-    complex(kind=r8) :: cwtr2lm(0:nchorizo,0:nspin-1,nisospin),cwtl2rm(0:nchorizo,0:nspin-1,nisospin) ! m means middle.
+    complex(kind=r8) :: cwtr2lm(0:nspin-1,nisospin,0:nchorizo),cwtl2rm(0:nspin-1,nisospin,0:nchorizo) ! m means middle.
     real(kind=r8) :: v
-    integer(kind=i4) :: i,j,k
+    integer(kind=i4) :: i
     real(kind=r8) :: x(3,npart) 
 
     x=ristra(i)%x 
     call xconvert(x)  
     if (i.eq.0) then             
-        call pecal(x,cwtbegin,cwtr2l(i,:,:),v)     
+        call pecal(x,cwtbegin,cwtr2l(:,:,i),v)     
     else
         if (i.eq.nchorizo) then           
-            call pecal(x,cwtl2r(i,:,:),cwtend,v)   
+            call pecal(x,cwtl2r(:,:,i),cwtend,v)   
         else
     ! in the somewhere middle  
-        call v6proplpr(x,-1,cwtr2l(i,:,:),cwtr2lm(i,:,:))
-        call v6proplpr(x,-1,cwtl2r(i,:,:),cwtl2rm(i,:,:))
-        call pecal(x,cwtl2rm(i,:,:),cwtr2lm(i,:,:),v)        
+        call v6proplpr(x,-1,cwtr2l(:,:,i),cwtr2lm(:,:,i))
+        call v6proplpr(x,-1,cwtl2r(:,:,i),cwtl2rm(:,:,i))
+        call pecal(x,cwtl2rm(:,:,i),cwtr2lm(:,:,i),v)        
         endif   
     endif
    
@@ -4777,23 +5098,12 @@ contains
     use chorizos
     use mympi
     type (chorizo) :: c0,cn
-    complex(kind=r8) :: cwtr2lout(0:nchorizo,0:nspin-1,nisospin),cwtl2rout(0:nchorizo,0:nspin-1,nisospin) &
-	                    ,psith0cwt(0:nspin-1,nisospin),nhpsitcwt(0:nspin-1,nisospin) &
-	                    ,cwtnew(0:nspin-1,nisospin),cwtold(0:nspin-1,nisospin) &
-	                    ,cwtnew1(0:nspin-1,nisospin),cwtold1(0:nspin-1,nisospin) &
-	                    ,cwtnew2(0:nspin-1,nisospin),cwtold2(0:nspin-1,nisospin)	&
-	                    ,h0psitcwt(0:nspin-1,nisospin),hnpsitcwt(0:nspin-1,nisospin) &
-                        ,cwta1(25,0:nspin-1,nisospin),cwta2(25,0:nspin-1,nisospin) &
-                        ,cwt(0:nspin-1,nisospin),cwta0(25,0:nspin-1,nisospin) &
-                        ,cwt1(0:nspin-1,nisospin),cwt2(0:nspin-1,nisospin)
+    complex(kind=r8) ::  cwta1(25,0:nspin-1,nisospin),cwta2(25,0:nspin-1,nisospin) 
     complex(kind=r8) :: f
-    real(kind=r8) :: rg,rgl,rgr,rf,absrf,valnum,valdenom,alr,blr,valnumpev6,valnumpeem,valnumke
-    real(kind=r8) :: psi20,psi2n,e0,en,e,psi2,pe0,pen,empe0,empen,psi,ke0,ken
-    integer(kind=i4) :: i,j,k,l
+    real(kind=r8) :: rf,absrf,valnum,valdenom,alr,blr,valnumpev6,valnumpeem,valnumke
+    real(kind=r8) :: psi20,psi2n,e0,en,psi2,pe0,pen,empe0,empen,psi,ke0,ken
     integer(kind=i4) :: icheck ! 0=pass,1=fail.
-    integer(kind=i4) :: invspin(nbasis),invispin(nbasis)
-    real(kind=r8) :: x(3,npart),x0(3,npart),xn(3,npart),d20(3,npart),f0(3,npart),d2n(3,npart),fn(3,npart) &
-                    ,r(3),dx(3)
+    real(kind=r8) :: x0(3,npart),xn(3,npart)
  
     !cwtr2lout=cwtr2l
     !cwtl2rout=cwtl2r
@@ -4804,9 +5114,9 @@ contains
      
     ! add the cwt r2l l2r checking.
 
-    call hpsitcwt(x0,iplo,jplo,cwtr2l(0,:,:),psi20,e0,ke0,pe0,empe0,cwta1)
+    call hpsitcwt(x0,iplo,jplo,cwtr2l(:,:,0),psi20,e0,ke0,pe0,empe0,cwta1)
      
-    !call hpsitcwt(x0,iplo,jplo,cwtr2l(0,:,:),psi20,e0,d20,pe0,f0,cwta0) 
+    !call hpsitcwt(x0,iplo,jplo,cwtr2l(:,:,0),psi20,e0,d20,pe0,f0,cwta0) 
    
     !write(6,*) 'cwta1 - cwta0 =', sum(abs(cwta1(1,:,:)-cwta0(1,:,:)))!,(cwta1(1,:,:)-cwta0(1,:,:))   
   
@@ -4815,7 +5125,7 @@ contains
     !write(6,*) 'cwta1 =', cwta1(1,:,:)
     !write(6,*) 'cwtbegin =', cwt
  
-    call hpsitcwt(xn,ipro,jpro,cwtl2r(nchorizo,:,:),psi2n,en,ken,pen,empen,cwta2)
+    call hpsitcwt(xn,ipro,jpro,cwtl2r(:,:,nchorizo),psi2n,en,ken,pen,empen,cwta2)
     !call corop(xn,ipro,jpro,cwt)  
     !write(6,*) 'cwta2 - cwtbegin =', sum(abs(cwta2(1,:,:)-cwt(:,:)))!,(cwta2(1,:,:)-cwt(:,:))       
     !write(6,*) 'cwta2 =', cwta2(1,:,:)
@@ -4863,18 +5173,18 @@ contains
     !!write(6,*) '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'   
     !!write(6,*) 'check cwtr2l,l2r'
     !!write(6,*) 'i=',i
-    !!write(6,'( ''cwtl2r ='', 12(g15.7,1x) )') cwtl2r(i,:,:) 
+    !!write(6,'( ''cwtl2r ='', 12(g15.7,1x) )') cwtl2r(:,:,i) 
     !!write(6,*) 'nchorizo-i=',nchorizo-i    
-    !!write(6,'( ''cwtr2l ='', 12(g15.7,1x) )') cwtr2l(nchorizo-i,:,:)
+    !!write(6,'( ''cwtr2l ='', 12(g15.7,1x) )') cwtr2l(:,:,nchorizo-i)
     !!write(6,*) '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
     !
     !
     !write(19,*) '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'   
     !write(19,*) 'check cwtr2l,l2r'
     !write(19,*) 'i=',i
-    !write(19,'( ''cwtl2r ='', 12(g15.7,1x) )') cwtl2r(i,:,:) 
+    !write(19,'( ''cwtl2r ='', 12(g15.7,1x) )') cwtl2r(:,:,i) 
     !write(19,*) 'nchorizo-i=',nchorizo-i    
-    !write(19,'( ''cwtr2l ='', 12(g15.7,1x) )') cwtr2l(nchorizo-i,:,:)
+    !write(19,'( ''cwtr2l ='', 12(g15.7,1x) )') cwtr2l(:,:,nchorizo-i)
     !write(19,*) '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
     !
     !enddo
@@ -4899,8 +5209,8 @@ contains
     !rgr=en
     !rg=(rgl+rgr)/2.
     !
-    f=cmplx(psi) ! neglect the imaginary part actually.
-    rf=real(f)
+    f=cmplx(psi) ! neglect the imaginary part actually. 
+    rf=real(f) ! f is the stuff without gaussian part bc gaussians are cancelled ususaly.
     absrf=abs(real(f))
   
     !write(6,*) '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'  
@@ -4922,8 +5232,8 @@ contains
     !write(12,*) 'jplo=',jplo   
     !write(12,*) 'ipro=',ipro
     !write(12,*) 'jpro=',jpro      
-    !write(12,*) 'cwtl2r(nchorizo,:,:)=',cwtl2r(nchorizo,:,:)     
-    !write(12,*) 'cwtr2l(0,:,:)=',cwtr2l(0,:,:)
+    !write(12,*) 'cwtl2r(:,:,nchorizo)=',cwtl2r(:,:,nchorizo)     
+    !write(12,*) 'cwtr2l(:,:,0)=',cwtr2l(:,:,0)
 
     ! scan and compare.
     
@@ -5003,28 +5313,27 @@ contains
     use v6stepcalc
     use brut 
     use random
-    integer(kind=i4) :: i,j,k
+    integer(kind=i4) :: i,j
     real(kind=r8) :: xr(3,npart),xl(3,npart),x(3,npart)
-    complex(kind=r8) :: cwt(0:nspin-1,nisospin)
    
     xl=ristra(0)%x 
     xr=ristra(nchorizo)%x
     ! l2r   
     call corop(xl,iplo,jplo,cwtbegin) ! psitcwt
-    call v6propr(xl,-1,cwtbegin,cwtl2r(0,:,:))
+    call v6propr(xl,-1,cwtbegin,cwtl2r(:,:,0))
     do i=1,nchorizo-1
     x=ristra(i)%x
-    call v6proplr(x,x,-1,cwtl2r(i-1,:,:),cwtl2r(i,:,:))
+    call v6proplr(x,x,-1,cwtl2r(:,:,i-1),cwtl2r(:,:,i))
     enddo   
-    call v6propl(xr,-1,cwtl2r(nchorizo-1,:,:),cwtl2r(nchorizo,:,:))
+    call v6propl(xr,-1,cwtl2r(:,:,nchorizo-1),cwtl2r(:,:,nchorizo))
     ! r2l 
     call corop(xr,ipro,jpro,cwtend)
-    call v6propr(xr,-1,cwtend,cwtr2l(nchorizo,:,:))
+    call v6propr(xr,-1,cwtend,cwtr2l(:,:,nchorizo))
     do j=nchorizo-1,1,-1
     x=ristra(j)%x
-    call v6proplr(x,x,-1,cwtr2l(j+1,:,:),cwtr2l(j,:,:))
+    call v6proplr(x,x,-1,cwtr2l(:,:,j+1),cwtr2l(:,:,j))
     enddo
-    call v6propl(xl,-1,cwtr2l(1,:,:),cwtr2l(0,:,:))
+    call v6propl(xl,-1,cwtr2l(:,:,1),cwtr2l(:,:,0))
 
     return
     end subroutine updatecwtchain   
@@ -5038,32 +5347,20 @@ contains
     use brut
     use mympi
     use math
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb &
-                    ,time0,time1,time2,timeall,second
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,i1,j,k,k0,l,m,n,ipick,ixd,lmax,icheck,ixtemp,nmax,nmax1,nmax2
-    integer(kind=i4) :: np,n1,m1,n2,m2,n3,m3,n4,n4c,m4,m4c,n5,n51,n5c,m5,n6,n61,n6c,m6,lnow &
-                      ,idummy1,idummy2,npatheach0,npatheach,rankl,rankr &
+    real(kind=r8) :: time0,time1,timeall,second
+    real(kind=r8) :: x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
+    integer(kind=i4) :: i,j,k,k0,l,ixtemp,nmax,nmax1,nmax2
+    integer(kind=i4) :: np,n1,m1,n2,m2,n3,n4,n4c,m4,n5,n51,n5c,n6,n61,n6c,lnow &
+                      ,npatheach0,npatheach &
                       ,day,hour,minute
-    integer(kind=i4) :: ipathtot,ipathnow,ipathrest,ipc1,ipc2,ipc3 ! check i4 or i8
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n
-    complex(kind=r8) :: f
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
+    integer(kind=i4) :: ipathtot,ipathnow
     integer(kind=i4), allocatable :: iplall(:,:),jplall(:,:),iprall(:,:),jprall(:,:)	! for mpi_gather
     real(kind=r8), allocatable :: xall(:,:) ! for mpi_gather
     integer(kind=i4), allocatable :: iplallo(:),jplallo(:),iprallo(:),jprallo(:)	
     real(kind=r8), allocatable :: xallo(:) 
     integer(kind=i4), allocatable :: iplalln(:),jplalln(:),ipralln(:),jpralln(:)	
     real(kind=r8), allocatable :: xalln(:)  
-    real(kind=r8), allocatable :: xtotnow(:)
-    integer(kind=i4), allocatable :: iplnow(:),jplnow(:),iprnow(:),jprnow(:)	
-    logical :: supermode ! true = turn on the big ram read in mode.
-    logical :: loaded,finished,loadmore,loadextra,loadedextra
+    logical :: loaded,loadmore,loadextra,loadedextra
     
     ixtemp=3*npart*(nchorizo+1)    
     if (ixtemp /= ixtempo) then
@@ -5433,20 +5730,14 @@ contains
     use random
     use brut
     use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,rankl,rankr
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
+    real(kind=r8) :: rm,rmsq
+    real(kind=r8) :: v(0:nchorizo) &
+	                ,x0totin(3,npart,0:nchorizo)
+    real(kind=r8), dimension(0:nrhobin) :: rhodistout
+    integer(kind=i4) :: i,rankl,rankr,icheck
+    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rf,vnum,vdenom
     real(kind=r8) :: psi20,psi2n
-    complex(kind=r8) :: f
     integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
  
 ! init   
     call chorizoallin(x0totin)
@@ -5516,31 +5807,19 @@ contains
     use random
     use brut
     use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp,iin
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n,valn,val2,err2,val1,err1,error
-    complex(kind=r8) :: f
-    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
+    integer(kind=i4) :: j,k,iin
+    real(kind=r8) :: val2,err2,val1,err1,error
     real(kind=r8), allocatable :: rhodist(:),rhodisterr(:)
     real(kind=r8), allocatable :: valnow(:),valaverage(:),valerr(:)
     character(len=30) :: vpropchorizo
 
     call update   !collect block averages
     call updateristra
-    answer=resstring()
       
     if (myrank().eq.0) then   
         write (6,*) 'path #: ', iin 
-	    write (12,*) 'path #: ', iin     
+	    write (12,*) 'path #: ', iin  
+        answer=resstring()
         write (6,'(a120)') (answer(k),k=1,size(answer))
 	    write (12,'(a120)') (answer(k),k=1,size(answer))  
     endif    
@@ -5562,7 +5841,7 @@ contains
     allocate(valnow(0:nchorizo),valaverage(0:nchorizo),valerr(0:nchorizo))
     call resultristra(1,valnow,valaverage,valerr,vpropchorizo)
     open(unit=33,form='formatted',file=vpropchorizo)
-    call result(4,valn,val2,err2) ! #4 is the denominator 
+    call resultest(4,val2,err2) ! #4 is the denominator 
     do j=0,nchorizo
         val1=valaverage(j)
         err1=valerr(j)  
@@ -5579,28 +5858,9 @@ contains
     end subroutine computeupdate  
     
     subroutine computeinit(answerin,rhobinsizein) ! call it before call compute
-    use estimator
-    use estimatorristra
-    use wavefunction
-    use random
-    use brut
     use mympi
-    real(kind=r8) :: rn(1),eleft,eright,rm,rmsq,rho0bin,r1,r2,r3,r23,rb
-    real(kind=r8) :: v(0:nchorizo),xtmp(3,npart) &
-	                ,x0totin(3,npart,0:nchorizo),x0tot(3,npart,0:nchorizo),x0tot1d(3*npart*(nchorizo+1))
-    real(kind=r8), dimension(0:nrhobin) :: rhodistout,rhodisterrout
-    integer(kind=i4) :: i,j,k,l,ipick,ixd,lmax,icheck,ixtemp
-    real(kind=r8) :: vn,vd,vnke,vnpev6,vnpeem,rgl,rgr,rg,rf,absf,vnum,vdenom &
-                    ,sum1,sum2
-    real(kind=r8) :: psi20,psi2n,rhobinsizein
-    complex(kind=r8) :: f
-    integer(kind=i4) :: iploin(6),jploin(6),iproin(6),jproin(6)
-    integer(kind=i4), allocatable :: icheck1d(:)
-    real(kind=r8), allocatable :: psi201d(:),psi2n1d(:)
-    integer(kind=i4), allocatable :: iplall(:),jplall(:),iprall(:),jprall(:)	! for mpi_gather
-    real(kind=r8), allocatable :: xall(:) ! for mpi_gather
     character(len=120) :: answerin(:)
-    
+    real(kind=r8) :: rhobinsizein
 
     allocate(answer(size(answerin)))
     rhobinsize=rhobinsizein 
@@ -5633,7 +5893,7 @@ contains
     
     
 
-!!!!!!!!!!!! this part is just to check m6matrix !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
+!!!!!!!!!!!! this part is just to check v6 matrix !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
 !    subroutine checkv6mat(x,psi2,psi2a)
 !!  make sure this subroutine is called after some initializaiotn.
 !    use matrixmod
@@ -6176,20 +6436,20 @@ contains
     !!!------------------------------------------------   
     !!! test      
     !   call coropr(xr,cwt)
-    !   val1=sum(conjg(cwtl2r(nchorizo,:,:))*cwt(:,:))
+    !   val1=sum(conjg(cwtl2r(:,:,nchorizo))*cwt(:,:))
     !   
     !   !write(6,*) 'cwt=', cwt(:,:)
-    !   !write(6,*) 'cwtl2r=', cwtl2r(nchorizo,:,:)  
+    !   !write(6,*) 'cwtl2r=', cwtl2r(:,:,nchorizo)  
     !   !write(6,*) 'xl before=', xl
     !   
     !   call coropl(xl,cwt)
     !   
     !   !write(6,*) 'xl after=', xl
     !    
-    !   val2=sum(conjg(cwtr2l(0,:,:))*cwt(:,:))
+    !   val2=sum(conjg(cwtr2l(:,:,0))*cwt(:,:))
     !
     !   !write(6,*) 'cwt=', cwt(:,:)
-    !   !write(6,*) 'cwtr2l=', cwtr2l(0,:,:)
+    !   !write(6,*) 'cwtr2l=', cwtr2l(:,:,0)
     !   
     !   write(6,*) 'val1, val2=',val1,val2
     !!!! result is correct, val1=val2.
@@ -6204,11 +6464,11 @@ contains
     !   write(6,*) 'jpro=',jpro
     !   
     !   xtmp=xl
-    !   call hpsitcwt(xtmp,iplo,jplo,cwtr2l(0,:,:),psi20,e0,d20,pe0,f0,cwta1)
+    !   call hpsitcwt(xtmp,iplo,jplo,cwtr2l(:,:,0),psi20,e0,d20,pe0,f0,cwta1)
     !   
     !  ! write(6,*) 'xl after=', xl
     !   
-    !   !write(6,*) 'cwtr2l=', cwtr2l(0,:,:)
+    !   !write(6,*) 'cwtr2l=', cwtr2l(:,:,0)
     !   !write(6,*) 'cwta1=', cwta1(1,:,:)
     !   
     !   !write(6,*) 'x before=', x  
@@ -6227,7 +6487,7 @@ contains
     !   !write(6,*) 'x0=', ristra(0)%x   
     !   
     !   xtmp=xr
-    !   call hpsitcwt(xtmp,ipro,jpro,cwtl2r(nchorizo,:,:),psi2n,en,d2n,pen,fn,cwta)
+    !   call hpsitcwt(xtmp,ipro,jpro,cwtl2r(:,:,nchorizo),psi2n,en,d2n,pen,fn,cwta)
     !   call coropr(xr,cwt)
     !   write(6,*) 'cwt-cwta=', cwt-cwta(1,:,:)   
     !   
@@ -6263,13 +6523,13 @@ contains
 	    !nhpsitcwt(invspin(k),invispin(k))=sum(conjg(cwtnew2)*cwtold) 
     !enddo
     !
-    !gl=sum(psith0cwt(:,:)*cwtr2l(0,:,:))
+    !gl=sum(psith0cwt(:,:)*cwtr2l(:,:,0))
     !rgl=real(gl)
-    !gr=sum(conjg(cwtl2r(nchorizo,:,:))*nhpsitcwt(:,:))
+    !gr=sum(conjg(cwtl2r(:,:,nchorizo))*nhpsitcwt(:,:))
     !rgr=real(gr)   
     !rg=0.5*(rgl+rgr)
     !
-    !f=sum(cwtold(:,:)*cwtr2l(0,:,:))
+    !f=sum(cwtold(:,:)*cwtr2l(:,:,0))
     !rf=real(f)
     !absrf=abs(rf)
     !
@@ -6280,7 +6540,7 @@ contains
     !!write(6,*) 'gr=',gr   
     !!write(6,*) 'f=',f  
     !!
-    !!write(6,*) 'cwtr2l(0)=',cwtr2l(0,:,:)
+    !!write(6,*) 'cwtr2l(0)=',cwtr2l(:,:,0)
     !!write(6,*) 'psith0cwt=',psith0cwt(:,:)
     !return
     !end subroutine hpsi       

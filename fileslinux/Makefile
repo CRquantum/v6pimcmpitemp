@@ -7,7 +7,7 @@ ifeq ($(MPI),true)
    MPIFILE=mympi
    EXEC=v6pimcmpi
 #OMP= #-openmp -lpthread -openmp-report
-FFLAGS= -O3 -xHost # -fast # -O2
+FFLAGS= -O3 -xHost -traceback  # -fast # -O2
 F77FLAGS=$(FFLAGS)  -r8 # intel fortran
 #LDFLAGS=-L/opt/intel/mkl/lib/intel64
 #LIBS=-lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_intel_thread -lmkl_lapack95_lp64 -lmkl_core -liomp5 -lpthread #-check all -warn all

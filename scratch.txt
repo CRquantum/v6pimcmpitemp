@@ -1,27 +1,5 @@
-turn on run-time warn all, fix possible warnings.
+may be use send, recv instead of scatter, gather when do IO.
 
-forrtl: warning (406): fort: (1): In call to V6PROPR, an array temporary was created for argument #4
+can change scatter, gather accordingly host array to 2d instead of 1d, so that it will be more easy to know which array belongs to which myrank().
 
-Image              PC                Routine            Line        Source
-libifcoremdd.dll   00007FF94D6C40F7  Unknown               Unknown  Unknown
-v6pimcmpitemp.exe  00007FF6284F8982  STEP_mp_STEPCHORI         302  step.f90
-v6pimcmpitemp.exe  00007FF62881E752  MAIN__                    284  he4v6pimc.f90
-v6pimcmpitemp.exe  00007FF62882E872  Unknown               Unknown  Unknown
-v6pimcmpitemp.exe  00007FF628830E64  Unknown               Unknown  Unknown
-v6pimcmpitemp.exe  00007FF628830D77  Unknown               Unknown  Unknown
-v6pimcmpitemp.exe  00007FF628830C3E  Unknown               Unknown  Unknown
-v6pimcmpitemp.exe  00007FF628830E79  Unknown               Unknown  Unknown
-KERNEL32.DLL       00007FF9A58A7974  Unknown               Unknown  Unknown
-ntdll.dll          00007FF9A736A271  Unknown               Unknown  Unknown
-
-I think when locate to 302 step, 
-    call v6propr(xl,-1,cwtbegin,cwtl2r(0,:,:))
-    do i=1,nchorizo-1
-	    x=ristra(i)%x
-	    call v6proplr(x,x,-1,cwtl2r(i-1,:,:),cwtl2r(i,:,:))
-    enddo 
-
-better to make thing like cwtl2r(:,:,i) insead of cwtl2r(i,:,:) since its column major. array element storage is not contiguous in memory will have this tempory created thing.
-
-
-the other thing is that may be use send, recv instead of scatter, gather when do IO.
+read PDG Monte Carlo part, see the randum number generator there.

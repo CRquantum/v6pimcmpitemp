@@ -22,5 +22,10 @@
 50   		     # the number of bins for one particle density rho.
 .false. 	     # icorrchk. true=check correlation, false means not. 
 .true.           # EM force switch. true = on. false  = off  
+0.9              # rb, bisection (repation) move upper bar
+0.95             # r1, move 1 by 1 upper bar    
+0.967            # r2, move all beads upper bar  
+0.984            # r3, shift beads upper bar
+1.0              # r23, move all + shift upper bar 
 he4ristra.in     # infile
 he4ristra.out    #outfile

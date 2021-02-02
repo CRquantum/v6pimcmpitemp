@@ -7,9 +7,7 @@ module random2
 
 contains
    subroutine ran1(rn,irn)
-!
 ! multiplicative congruential with additive constant
-!
    integer(kind=i8),  parameter :: mask24 = ishft(1_8,24)-1
    integer(kind=i8),  parameter :: mask48 = ishft(1_8,48_8)-1_8
    real(kind=r8),  parameter :: twom48=2.0d0**(-48)
@@ -28,9 +26,7 @@ contains
    end subroutine ran1
 
    subroutine ran2(rn,irn)
-!
 ! multiplicative congruential with additive constant
-!
    integer(kind=i8),  parameter :: mask24 = ishft(1_8,24)-1
    integer(kind=i8), parameter :: mask48 = ishft(1_8,48)-1
    real(kind=r8), parameter :: twom48=2.0d0**(-48)
@@ -47,6 +43,7 @@ contains
    rn = ior(irn,1_8)*twom48
    return
    end subroutine ran2
+   
 end module random2
 
 module random
@@ -59,9 +56,7 @@ module random
 
 contains   
    function randn(n)
-!
 ! return an array of random variates (0,1)
-!
    use random2
    integer(kind=i4) :: n
    real(kind=r8), dimension(n) :: randn
@@ -73,9 +68,7 @@ contains
    end function randn
 
    function gaussian(n)
-!
 ! return an array of gaussian random variates with variance 1
-!
    integer(kind=i4) :: n
    real(kind=r8), dimension(n) :: gaussian
    real(kind=r8), dimension(2*((n+1)/2)) :: rn
@@ -107,11 +100,11 @@ contains
    subroutine setrn(irnin)
 ! set the seed
    integer(kind=i8) :: irnin
-   !integer(kind=i8), dimension(1) :: iseed
+   integer(kind=i4), dimension(1) :: iseed
    irn=iand(irnin,mask48)
    call savern(irn)
-   !iseed=irnin
-   !call RANDOM_SEED(PUT=iseed) ! set the internal ran function's seed.
+   iseed=int(irnin)
+   call RANDOM_SEED(PUT=iseed) ! set the internal ran function's seed.
    return
    end subroutine setrn
 
@@ -129,13 +122,12 @@ contains
    return
    end subroutine showirn   
    
-!   function randomn(n) ! the default ramdom_number subroutine.
-!! return an array of random variates (0,1)
-!   integer(kind=i4) :: n
-!   real(kind=r8), dimension(n) :: randomn
-!   integer(kind=i4) :: i
-!   call RANDOM_NUMBER(randomn)
-!   return
-!   end function randomn
+   function randomn(n) ! the default ramdom_number subroutine.
+! return an array of random variates (0,1)
+   integer(kind=i4) :: n
+   real(kind=r8), dimension(n) :: randomn
+   call RANDOM_NUMBER(randomn)
+   return
+   end function randomn
 
 end module random

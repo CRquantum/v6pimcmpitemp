@@ -391,6 +391,7 @@ contains
    subroutine abort
    integer :: ierror
    call mpi_abort(mpi_comm_world,ierror)
+   !stop
    return
    end subroutine abort
 

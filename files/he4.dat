@@ -1,31 +1,32 @@
-84           # random number seed    84 find bug
+88888888              # random number seed  84 find tecahetra, 
 20.735           # hbar^2/2m for He4
-0.002            # dt
+0.001            # dt
 4                # particle number
 2                # proton number
-5000             # table points
-4                # mmax, bisection level 
-16               # reptation move beads number
+50000             # table points, make sure dr smaller than KE's dx. here set 50000 is OK.
+5                # mmax, bisection level 
+0               # reptation move beads number
 .true.          # isite
-0               # neq    10 
-4               # nav   10000
-1000             # nstep
-200              # nstepdecor
-50               # nchorizo
-0.07             # mov1step
-0.025            # mov2step
-0.05            # move3 the shift step 
+1               # neq    10 
+5000               # nav   10000
+2000             # nstep 1000
+333              # nstepdecor 200
+150               # nchorizo
+0.125             # mov1step
+0.01            # mov2step
+0.1            # move3 the shift step 
 1.0              # x0step
-5                # irep, 1 = primitive , 2 = PIMC , 3 metrop diff, 4 VMC ,5 calcuate mode, 6, not decided yet.
-10.              # rangev  potential range
+2                # irep, 1 = primitive , 2 = local energy (PIMC) , 3 = not defined , 4 VMC ,5 calcuate mode (angle ave response) 6, calcuate mode fast (wo angle ave response) 
+.false.          # resume mode or not.
+15.              # rangev  potential range
 5.               # one particle density rho range (fm)   
 50   		     # the number of bins for one particle density rho.
 .false. 	     # icorrchk. true=check correlation, false means not. 
 .true.           # EM force switch. true = on. false  = off  
-0.9              # rb, bisection (repation) move upper bar
-0.95             # r1, move 1 by 1 upper bar    
-0.967            # r2, move all beads upper bar  
-0.984            # r3, shift beads upper bar
-1.0              # r23, move all + shift upper bar 
+0.9              # 0.9 rb, bisection (repation) move upper bar
+0.95             # r1, move 1 by 1 upper bar    0.95 
+0.967            # r2, move all beads upper bar   0.967
+0.984            # r3, shift beads upper bar   0.984
+1.0              # r23, move all + shift upper bar  1.0
 he4ristra.in     # infile
 he4ristra.out    #outfile

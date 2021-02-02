@@ -7,7 +7,7 @@ ifeq ($(MPI),true)
    MPIFILE=mympi
    EXEC=v6pimcmpi
 #OMP= #-openmp -lpthread -openmp-report
-FFLAGS= -O3 -xHost -traceback  # -fast # -O2
+FFLAGS= -O3 -xHost -traceback -heap-arrays  # -fast # -O2
 F77FLAGS=$(FFLAGS)  -r8 # intel fortran
 #LDFLAGS=-L/opt/intel/mkl/lib/intel64
 #LIBS=-lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_intel_thread -lmkl_lapack95_lp64 -lmkl_core -liomp5 -lpthread #-check all -warn all
@@ -32,9 +32,12 @@ endif
 .f90.o:
 	$(FC) $(FFLAGS) -c $<
 
+%.o: %.mod
+
 OBJECTS=\
 he4v6pimc.o\
 av18pot.o\
+v6stepcalc.o\
 brut.o\
 cheft.o\
 chorizos.o\
@@ -48,7 +51,6 @@ pot.o\
 ran.o\
 step.o\
 v6pot.o\
-v6stepcalc.o\
 volume.o\
 wavefunction.o
    
@@ -56,7 +58,7 @@ he4v6pimc: $(OBJECTS)
 	$(FC) -o ./$(EXEC) $(OBJECTS) $(LIBS) 
 
 clean:
-	rm -f *\.mod *\.o *~
+	rm -f $(EXEC) *\.mod *\.o *~ 
 
 he4v6pimc.o: ran.o brut.o $(MPIFILE).o step.o\
 	v6stepcalc.o estimator.o estimatorristra.o wavefunction.o math.o he4v6pimc.f90
@@ -65,7 +67,10 @@ he4v6pimc.o: ran.o brut.o $(MPIFILE).o step.o\
 av18pot.o: av18pot.f
 	$(FC) $(F77FLAGS) -c av18pot.f
 
-brut.o: $(MPIFILE).o ran.o math.o brut.f90
+v6stepcalc.o: $(MPIFILE).o math.o brut.o v6pot.o v6stepcalc.f90
+	$(FC) $(FFLAGS) -c v6stepcalc.f90
+	
+brut.o: $(MPIFILE).o ran.o math.o cheft.o v6pot.o brut.f90
 	$(FC) $(FFLAGS) -c brut.f90
 
 cheft.o: cheft.f90
@@ -77,7 +82,7 @@ chorizos.o: $(MPIFILE).o chorizos.f90
 estimator.o: $(MPIFILE).o estimator.f90
 	$(FC) $(FFLAGS) -c estimator.f90
 	
-estimatorristra.o: $(MPIFILE).o estimatorristra.f90
+estimatorristra.o: $(MPIFILE).o estimator.o estimatorristra.f90
 	$(FC) $(FFLAGS) -c estimatorristra.f90
 
 lattice.o: lattice.f90
@@ -105,12 +110,9 @@ step.o: chorizos.o math.o wavefunction.o v6stepcalc.o ran.o brut.o $(MPIFILE).o\
 v6pot.o: cheft.o $(MPIFILE).o v6pot.f90
 	$(FC) $(FFLAGS) -c v6pot.f90
 
-v6stepcalc.o: v6pot.o $(MPIFILE).o math.o brut.o v6stepcalc.f90
-	$(FC) $(FFLAGS) -c v6stepcalc.f90
-
 volume.o: volume.f90
 	$(FC) $(FFLAGS) -c volume.f90
 
-wavefunction.o: $(MPIFILE).o math.o lj.o v6stepcalc.o brut.o wavefunction.f90
+wavefunction.o: $(MPIFILE).o math.o lj.o v6stepcalc.o brut.o estimator.o wavefunction.f90
 	$(FC) $(FFLAGS) -c wavefunction.f90
 

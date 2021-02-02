@@ -250,3 +250,4 @@ vsl/
 zheev/
 /v6pimcmpitemp/*
 !/v6pimcmpitemp/*.vfproj
+*.db3

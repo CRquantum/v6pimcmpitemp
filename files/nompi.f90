@@ -21,7 +21,7 @@ interface addall ! return sum to process 0
 end interface addall
 
 interface gather ! gather to process 0
-   module procedure gatheri1,gatheri1d
+   module procedure gatheri1,gatheri1d,gatheri81
    module procedure gatherr1,gatherr1d
 end interface gather
 
@@ -207,6 +207,13 @@ contains
    return
    end subroutine gatheri1d
 
+   subroutine gatheri81(i,igather)
+   integer(kind=i8) :: i,igather(:)
+   integer :: ierror
+   igather(:)=i
+   return
+   end subroutine gatheri81    
+   
    subroutine gatherr1(r,rgather)
    real(kind=r8) :: r,rgather(:)
    integer :: ierror
@@ -306,11 +313,9 @@ contains
    end subroutine recvc1d   
    
    subroutine barrier ! wrapper for mpi_barrier
-   integer(kind=i4) :: ierror
    end subroutine barrier   
    
    subroutine abort
-   integer :: ierror
    stop 'abort, stop!'
    end subroutine abort
 

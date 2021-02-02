@@ -1,9 +1,10 @@
-module math
+﻿module math
    implicit none
    integer, private, parameter :: i4=selected_int_kind(9)
    integer, private, parameter :: i8=selected_int_kind(15)
    integer, private, parameter :: r8=selected_real_kind(15,9)
    integer(kind=i4), private, dimension(:,:), allocatable, save :: p3map,p4map,p5map,p6map,p7map ! permutation map. 
+   real(kind=r8), private, parameter ::  tiny=1.0d-8
 contains
     
     subroutine mathinit ! make the table. for stepinit.
@@ -186,6 +187,41 @@ contains
         -int((timeall-int(timeall/3600/24)*3600*24-int((timeall-int(timeall/3600/24)*3600*24)/3600)*3600)/60)*60    
     return
     endsubroutine timedhms   
-   
- 
+
+    subroutine sphbesselj(n,x,val) 
+! spherical Bessel functions jn.
+    real(kind=r8) :: val,x
+    integer(kind=i4) :: n
+    select case (n)
+    case (0)
+        if (x < tiny) then
+            val=1
+        else
+            val=sin(x)/x
+        endif
+    case (1)     
+        if (x < tiny) then
+            val=0
+        else
+            val=sin(x)/x**2-cos(x)/x
+        endif     
+    case (2)
+        if (x < tiny) then
+            val=0
+        else
+            val=(3/x**2-1)*sin(x)/x-3*cos(x)/x**2
+        endif        
+    case (3)
+        if (x < tiny) then
+            val=0
+        else
+            val=(15/x**3-6/x)*sin(x)/x-(15/x**2-1)*cos(x)/x
+        endif           
+    case default 
+        write (6,'(''icase value does not match sphbesselj'')') n
+        call abort         
+    end select
+    return
+    end subroutine sphbesselj
+    
 end module math

@@ -636,4 +636,52 @@ contains
    endsubroutine cheft_pw
 
 !----------------------------------------------------------------------!
+   
+   
+    subroutine cheft_pot_ls(lpot,rr,vls) ! take out vls=vnn(7) only. Rong Chen
+    integer :: lpot
+    real(kind=r8) :: rr
+    real(kind=r8) :: vls
+    real(kind=r8) :: r
+    real(kind=r8) :: g_r0p, del_r
+
+    select case(lpot)
+       case(112:114)
+          r_0p=1.0_r8
+          NLO_C=(/0.314202_r8,0.257857_r8,-0.131344_r8,0.118613_r8,-2.385514_r8,0.373188_r8,-0.356684_r8/)
+          N2LO_C=(/-0.140842_r8,0.042427_r8,-0.123378_r8,0.110184_r8,-2.112533_r8,0.158979_r8,-0.269935_r8/)
+       case(122:124)
+          r_0p=1.2_r8
+          NLO_C=(/0.222888_r8,0.228779_r8,-0.150425_r8,0.089285_r8,-2.029313_r8,0.340112_r8,-0.362474_r8/)
+          N2LO_C=(/-0.079513_r8,0.076102_r8,-0.169261_r8,0.123588_r8,-1.942800_r8,0.214206_r8,-0.341926_r8/)
+    end select
+
+    !Sometimes the input rr is 0, so I need to make sure
+    !this routine handles that properly:
+    if (abs(rr).LT.0.001_r8) then
+        r = 0.001_r8
+    else
+        r = rr
+    end if
+
+    vls = 0.0_r8
+
+    g_r0p = 1.0_r8/(pi*g34*r_0p**3)
+
+    !Note that the following is used both for contacts and to regulate OPE
+    del_r = exp(-(r/r_0p)**4)
+
+    if (lpot.EQ.113.or.lpot.eq.123) then  
+        vls = hbarc*NLO_C(5)*2.0_r8*(r**2/r_0p**4)*del_r*g_r0p 
+    end if
+
+    if (lpot.EQ.114.or.lpot.eq.124) then
+        vls = hbarc*N2LO_C(5)*2.0_r8*(r**2/r_0p**4)*del_r*g_r0p 
+    end if
+
+    return
+    end subroutine cheft_pot_ls   
+   
+   
+   
 end module cheft
